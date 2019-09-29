@@ -1,0 +1,8 @@
+# Sample nvram_generic.conf
+IpmctlPath=/usr/bin/ipmctl
+IpmctlTimeout=600000
+AllowNVRAMMode=1LM,2LM
+DefaultNVRAMMode=1LM
+AllowUserBoot=root
+BMCIP=169.254.0.2
+BMCPASSWORD=test

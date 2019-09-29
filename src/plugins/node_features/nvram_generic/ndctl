@@ -1,0 +1,34 @@
+#!/bin/bash
+# Emulate ndctl (Intel's MOBO interface) for testing purposes
+# Use cases:
+# ndctl list --namespaces
+# ndctl show --
+# ndctl show --
+# ndctl show --
+# ndctl show --
+#
+
+if [ "${1}" == "list" -a "${2}" == "--namespaces" ]; then
+   echo '['
+   echo '  {'
+   echo '    "dev":"namespace13.0",'
+   echo '    "mode":"fsdax",'
+   echo '    "map":"dev",'
+   echo '    "size":1598128390144,'
+   echo '    "uuid":"a0abf8db-5871-4066-9da3-e630fd42e5d3",'
+   echo '    "blockdev":"pmem13"'
+   echo '  },'
+   echo '  {'
+   echo '    "dev":"namespace12.0",'
+   echo '    "mode":"fsdax",'
+   echo '    "map":"dev",'
+   echo '    "size":1598128390144,'
+   echo '    "uuid":"102e4a28-0888-452f-973d-b8cb12c1c7ca",'
+   echo '    "blockdev":"pmem12"'
+   echo '  }'
+   echo ']'
+   exit 0
+fi
+
+echo 'Invalid argument'
+exit 1

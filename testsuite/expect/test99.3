@@ -1,0 +1,970 @@
+#!/usr/bin/env expect
+############################################################################
+# Purpose: Test of Slurm functionality
+#          Test of job workflows (--workflow-start --workflow-prior-dependency --workflow-end options).
+#
+# Output:  "TEST: #.#" followed by "SUCCESS" if test was successful, OR
+#          "FAILURE: ..." otherwise with an explanation of the failure, OR
+#          anything else indicates a failure mode that must be investigated.
+############################################################################
+# Copyright (C) 2004-2007 The Regents of the University of California.
+# Produced at Lawrence Livermore National Laboratory (cf, DISCLAIMER).
+# Written by Morris Jette <jette1@llnl.gov>
+# CODE-OCEC-09-009. All rights reserved.
+#
+# This file is part of Slurm, a resource management program.
+# For details, see <https://slurm.schedmd.com/>.
+# Please also read the included file: DISCLAIMER.
+#
+# Slurm is free software; you can redistribute it and/or modify it under
+# the terms of the GNU General Public License as published by the Free
+# Software Foundation; either version 2 of the License, or (at your option)
+# any later version.
+#
+# Slurm is distributed in the hope that it will be useful, but WITHOUT ANY
+# WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+# FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
+# details.
+#
+# You should have received a copy of the GNU General Public License along
+# with Slurm; if not, write to the Free Software Foundation, Inc.,
+# 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301  USA.
+############################################################################
+source ./globals
+
+set test_id     "99.3"
+set file_in1    "test$test_id.input1"
+set exit_code   0
+set job_id1     0
+set job_id2     0
+set job_id3     0
+set job_id4     0
+set job_id5     0
+set job_id6     0
+set job_id7     0
+set job_id8     0
+# Job 1: Start Job
+# Job 2: depends on (1)
+# Job 3: depends on (2)
+# Job 4: depends on (1)
+# Job 5: depends on (3)
+# Job 6: depends on (1,3)
+# Job 7: depends on (6)
+# Job 8: depends on (1) submitted AFTER (1) has finished (FAIL)
+remove_nulls 0
+
+print_header $test_id
+
+# if scontrol could be ran from the compute nodes this would work as well
+if {[test_alps]} {
+	send_user "\nWARNING: This test is incompatible with Cray systems\n"
+	exit $exit_code
+}
+
+#
+# Build input script files
+#
+exec $bin_rm -f $file_in1
+make_bash_script $file_in1 "$bin_sleep 6"
+
+#
+# A. Spawn a batch job that just sleeps for a while
+#
+set timeout $max_job_delay
+set sbatch_pid1 [spawn $sbatch --workflow-start --job-name="1" --output=/dev/null --error=/dev/null -t1 $file_in1]
+expect {
+	-re "Submitted batch job ($number)" {
+		set job_id1 $expect_out(1,string)
+                incr matches
+		exp_continue
+	}
+	timeout {
+		send_user "\nFAILURE: sbatch not responding (1) \n"
+		slow_kill $sbatch_pid1
+		set exit_code 1
+	}
+	eof {
+		wait
+	}
+}
+if {$job_id1 == 0} {
+	send_user "\nFAILURE: batch submit failure (1) \n"
+	exit 1
+}
+#
+# Use scontrol to check the status of the FIRST job (1)
+#
+set match_job_state 0
+spawn $scontrol show job $job_id1
+expect {
+        -re "Workflow ID=$job_id1" {
+                incr match_job_state
+                exp_continue
+        }
+        "Start=1" {
+                incr match_job_state
+                exp_continue
+        }
+        "PRIOR=(null)" {
+                incr match_job_state
+                exp_continue
+        }
+        "POST=(null)," {
+                incr match_job_state
+                exp_continue
+        }
+        "End=0" {
+                incr match_job_state
+                exp_continue
+        }
+        timeout {
+                send_user "\nFAILURE: scontrol not responding ($job_id1) (2)\n"
+                cancel_job $job_id1
+                set exit_code 2
+        }
+        eof {
+                wait
+        }
+}
+if {$match_job_state != 5} {
+        send_user "$match_job_state FAILURE: ($job_id1) invalid workflow; (A) Job has wrong Workflow details (2).\n"
+        exit 1
+}
+send_user "SUCCESS: (1) Main job has started.\n"
+
+
+#
+# B. Submit a workflow job with a valid PRIOR (sbatch)
+#
+set match_job_state 0
+set sbatch_pid2 [spawn $sbatch --workflow-prior-dependency=$job_id1 --job-name="2>1" --output=/dev/null --error=/dev/null -t1 $file_in1]
+expect {
+        -re "Submitted batch job ($number)" {
+                set job_id2 $expect_out(1,string)
+                incr matches
+                exp_continue
+        }
+        timeout {
+                log_error "\nFAILURE: sbatch not responding (3)\n"
+                slow_kill $sbatch_pid2
+                set exit_code 1
+        }
+        eof {
+                wait
+        }
+}
+if {$matches != 2} {
+        send_user "$matches FAILURE: batch submit failure (B). (3)\n"
+        exit 1
+}
+#
+# Use scontrol to check the status of the SECOND job (2)
+#
+set match_job_state 0
+spawn $scontrol show job $job_id2
+expect {
+        "JobState=PENDING" {
+                incr match_job_state
+                exp_continue
+        }
+        -re "Workflow ID=$job_id1" {
+                incr match_job_state
+                exp_continue
+        }
+        "Start=0" {
+                incr match_job_state
+                exp_continue
+        }
+        -re "PRIOR=$job_id1" {
+                incr match_job_state
+                exp_continue
+        }
+        "POST=(null)" {
+                incr match_job_state
+                exp_continue
+        }
+        "End=0" {
+                incr match_job_state
+                exp_continue
+        }
+        timeout {
+                send_user "\nFAILURE: scontrol not responding ($job_id2) (4)\n"
+                cancel_job $job_id2
+                set exit_code 2
+        }
+        eof {
+                wait
+        }
+}
+if {$match_job_state != 6} {
+        send_user "$match_job_state FAILURE: ($job_id2) invalid workflow; (B) Child Job is not PENDING due to Workflows or has wrong Workflow details (4).\n"
+        exit 1
+}
+send_user "SUCCESS: (2>1) Second job is in a PENDING state due to Workflows and has properly UPDATED PRIOR details.\n"
+
+wait_for_job $job_id1 RUNNING
+
+#
+# Use scontrol to check the status of the FIRST job (1) (check that it has been updated properly)
+#
+set match_job_state 0
+spawn $scontrol show job $job_id1
+expect {
+        "JobState=RUNNING" {
+                incr match_job_state
+                exp_continue
+        }
+        -re "Workflow ID=$job_id1" {
+                incr match_job_state
+                exp_continue
+        }
+        "Start=1" {
+                incr match_job_state
+                exp_continue
+        }
+        "PRIOR=(null)" {
+                incr match_job_state
+                exp_continue
+        }
+        -re "POST=$job_id2" {
+                incr match_job_state
+                exp_continue
+        }
+        "End=0" {
+                incr match_job_state
+                exp_continue
+        }
+        timeout {
+                send_user "\nFAILURE: scontrol not responding ($job_id1) (5)\n"
+                cancel_job $job_id1
+                set exit_code 2
+        }
+        eof {
+                wait
+        }
+}
+if {$match_job_state != 6} {
+        send_user "$match_job_state FAILURE: ($job_id1) invalid workflow; (B) Start job has wrong Workflow details (5).\n"
+        exit 1
+}
+send_user "SUCCESS: (1) Main job has been properly UPDATED POST details.\n"
+
+#
+# C. Submit a workflow job with a valid PRIOR (sbatch)
+#
+set sbatch_pid3 [spawn $sbatch --workflow-prior-dependency=$job_id2 --job-name="3>2>1" --output=/dev/null --error=/dev/null -t1 $file_in1]
+expect {
+        -re "Submitted batch job ($number)" {
+                set job_id3 $expect_out(1,string)
+                incr matches
+                exp_continue
+        }
+        timeout {
+                log_error "\nFAILURE: sbatch not responding (6)\n"
+                slow_kill $sbatch_pid3
+                set exit_code 1
+        }
+        eof {
+                wait
+        }
+}
+if {$matches != 3} {
+        send_user "$matches FAILURE: batch submit failure (C). (6).\n"
+        exit 1
+}
+
+#
+# Use scontrol to check the status of the SECOND job (2)
+#
+exec $bin_sleep 1
+set match_job_state 0
+spawn $scontrol show job $job_id2
+expect {
+        "JobState=PENDING" {
+                incr match_job_state
+                exp_continue
+        }
+        "Reason=Workflows" {
+                incr match_job_state
+                exp_continue
+        }
+        -re "Workflow ID=$job_id1" {
+                incr match_job_state
+                exp_continue
+        }
+        "Start=0" {
+                incr match_job_state
+                exp_continue
+        }
+        -re "PRIOR=$job_id1" {
+                incr match_job_state
+                exp_continue
+        }
+        -re "POST=$job_id3" {
+                incr match_job_state
+                exp_continue
+        }
+        "End=0" {
+                set match_job_state
+                exp_continue
+        }
+        timeout {
+                send_user "\nFAILURE: scontrol not responding ($job_id2) (7)\n"
+                cancel_job $job_id2
+                set exit_code 2
+        }
+        eof {
+                wait
+        }
+}
+if {$match_job_state != 6} {
+        send_user "$match_job_state FAILURE: ($job_id2) invalid workflow; (C) Child Job is not PENDING due to Workflows or has wrong Workflow details (7).\n"
+        exit 1
+}
+send_user "SUCCESS: (2>1) Second job been properly UPDATED POST.\n"
+
+#
+# Use scontrol to check the status of the THIRD job (3)
+#
+set match_job_state 0
+spawn $scontrol show job $job_id3
+expect {
+        "JobState=PENDING" {
+                incr match_job_state
+                exp_continue
+        }
+        -re "Workflow ID=$job_id1" {
+                incr match_job_state
+                exp_continue
+        }
+        "Start=0" {
+                incr match_job_state
+                exp_continue
+        }
+        -re "PRIOR=$job_id2" {
+                incr match_job_state
+                exp_continue
+        }
+        "POST=(null)" {
+                incr match_job_state
+                exp_continue
+        }
+        "End=0" {
+                set match_job_state
+                exp_continue
+        }
+        timeout {
+                send_user "\nFAILURE: scontrol not responding ($job_id3) (8)\n"
+                cancel_job $job_id3
+                set exit_code 2
+        }
+        eof {
+                wait
+        }
+}
+if {$match_job_state != 5} {
+        send_user "$match_job_state FAILURE: ($job_id3) invalid workflow; (C) Child Job is not PENDING due to Workflows or has wrong Workflow details (8).\n"
+        exit 1
+}
+send_user "SUCCESS: (3>2>1) Third job is PENDING due to Workflows and has been properly UPDATED PRIOR details.\n"
+
+#
+# D. Submit a workflow job with a valid PRIOR (sbatch)
+#
+set sbatch_pid4 [spawn $sbatch --workflow-prior-dependency=$job_id1 --workflow-end --job-name="4>1" --output=/dev/null --error=/dev/null -t1 $file_in1]
+expect {
+        -re "Submitted batch job ($number)" {
+                set job_id4 $expect_out(1,string)
+                incr matches
+                exp_continue
+        }
+        timeout {
+                log_error "\nFAILURE: sbatch not responding (9)\n"
+                slow_kill $sbatch_pid4
+                set exit_code 1
+        }
+        eof {
+                wait
+        }
+}
+if {$matches != 4} {
+        send_user "$matches FAILURE: batch submit failure (D). (9).\n"
+        exit 1
+}
+
+#
+# Use scontrol to check the status of the FIRST job (1)
+#
+#exec $bin_sleep 1
+set match_job_state 0
+spawn $scontrol show job $job_id1
+expect {
+        "JobState=RUNNING" {
+                incr match_job_state
+                exp_continue
+        }
+        -re "Workflow ID=$job_id1" {
+                incr match_job_state
+                exp_continue
+        }
+        "Start=1" {
+                incr match_job_state
+                exp_continue
+        }
+        "PRIOR=(null)" {
+                incr match_job_state
+                exp_continue
+        }
+        -re "POST=$job_id2,$job_id4" {
+                incr match_job_state
+                exp_continue
+        }
+        "End=0" {
+                set match_job_state
+                exp_continue
+        }
+        timeout {
+                send_user "\nFAILURE: scontrol not responding ($job_id1) (10)\n"
+                cancel_job $job_id3
+                set exit_code 2
+        }
+        eof {
+                wait
+        }
+}
+if {$match_job_state != 5} {
+        send_user "$match_job_state FAILURE: ($job_id1) invalid workflow; (D) Parent Job has wrong Workflow details (10).\n"
+        exit 1
+}
+send_user "SUCCESS: (1) Main job has been properly UPDATED POST details.\n"
+
+#
+# Use scontrol to check the status of the FOURTH job (4)
+#
+set match_job_state 0
+spawn $scontrol show job $job_id4
+expect {
+        "JobState=PENDING" {
+                incr match_job_state
+                exp_continue
+        }
+        -re "Workflow ID=$job_id1" {
+                incr match_job_state
+                exp_continue
+        }
+        "Start=0" {
+                incr match_job_state
+                exp_continue
+        }
+        -re "PRIOR=$job_id1" {
+                incr match_job_state
+                exp_continue
+        }
+        "POST=(null)" {
+                incr match_job_state
+                exp_continue
+        }
+        "End=1" {
+                set match_job_state
+                exp_continue
+        }
+        timeout {
+                send_user "\nFAILURE: scontrol not responding ($job_id4) (11)\n"
+                cancel_job $job_id3
+                set exit_code 2
+        }
+        eof {
+                wait
+        }
+}
+if {$match_job_state != 5} {
+        send_user "$match_job_state FAILURE: ($job_id4) invalid workflow; (D) Parent Job has wrong Workflow details (11).\n"
+        exit 1
+}
+send_user "SUCCESS: (4>1) Fourth job is in PENDING state due to Workflows and has been properly UPDATED PRIOR details.\n"
+
+exec $bin_sleep 1
+#
+# E. Submit a workflow job with a valid PRIOR (sbatch)
+#
+set sbatch_pid5 [spawn $sbatch --workflow-prior-dependency=$job_id3 --job-name="5>3>1" --output=/dev/null --error=/dev/null -t1 $file_in1]
+expect {
+        -re "Submitted batch job ($number)" {
+                set job_id5 $expect_out(1,string)
+                incr matches
+                exp_continue
+        }
+        timeout {
+                log_error "\nFAILURE: sbatch not responding (12)\n"
+                slow_kill $sbatch_pid5
+                set exit_code 1
+        }
+        eof {
+                wait
+        }
+}
+if {$matches != 5} {
+        send_user "$matches FAILURE: batch submit failure (E). (12).\n"
+        exit 1
+}
+
+#
+# Use scontrol to check the status of the THIRD job (3)
+#
+exec $bin_sleep 2
+set match_job_state 0
+spawn $scontrol show job $job_id3
+expect {
+        "JobState=PENDING" {
+                incr match_job_state
+                exp_continue
+        }
+        "Reason=Workflows" {
+                incr match_job_state
+                exp_continue
+        }
+        -re "Workflow ID=$job_id1" {
+                incr match_job_state
+                exp_continue
+        }
+        "Start=0" {
+                incr match_job_state
+                exp_continue
+        }
+        -re "PRIOR=$job_id2" {
+                incr match_job_state
+                exp_continue
+        }
+        -re "POST=$job_id5" {
+                incr match_job_state
+                exp_continue
+        }
+        "End=0" {
+                set match_job_state
+                exp_continue
+        }
+        timeout {
+                send_user "\nFAILURE: scontrol not responding ($job_id3) (13)\n"
+                cancel_job $job_id3
+                set exit_code 2
+        }
+        eof {
+                wait
+        }
+}
+if {$match_job_state != 6} {
+        send_user "$match_job_state FAILURE: ($job_id3) invalid workflow; (E) Parent Job has wrong Workflow details (13).\n"
+        exit 1
+}
+send_user "SUCCESS: (3>2>1) Third job is in PENDING state due to Workflows and has been properly UPDATED PRIOR and POST details.\n"
+
+#
+# Use scontrol to check the status of the FIFTH job (5)
+#
+set match_job_state 0
+spawn $scontrol show job $job_id5
+expect {
+        "JobState=PENDING" {
+                incr match_job_state
+                exp_continue
+        }
+        -re "Workflow ID=$job_id1" {
+                incr match_job_state
+                exp_continue
+        }
+        "Start=0" {
+                incr match_job_state
+                exp_continue
+        }
+        -re "PRIOR=$job_id3" {
+                incr match_job_state
+                exp_continue
+        }
+        "POST=(null)" {
+                incr match_job_state
+                exp_continue
+        }
+        "End=0" {
+                set match_job_state
+                exp_continue
+        }
+        timeout {
+                send_user "\nFAILURE: scontrol not responding ($job_id5) (14)\n"
+                cancel_job $job_id5
+                set exit_code 2
+        }
+        eof {
+                wait
+        }
+}
+if {$match_job_state != 5} {
+        send_user "$match_job_state FAILURE: ($job_id5) invalid workflow; (E) Parent Job has wrong Workflow details (14).\n"
+        exit 1
+}
+send_user "SUCCESS: (5>3>1) Fifth job is in PENDING state due to Workflows and has been properly UPDATED PRIOR details.\n"
+
+
+#
+# F. Submit a workflow job with a valid PRIOR (sbatch)
+#
+set sbatch_pid6 [spawn $sbatch --workflow-prior-dependency=$job_id1,$job_id3 --job-name="6>1,3" --output=/dev/null --error=/dev/null -t1 $file_in1]
+expect {
+        -re "Submitted batch job ($number)" {
+                set job_id6 $expect_out(1,string)
+                incr matches
+                exp_continue
+        }
+        timeout {
+                log_error "\nFAILURE: sbatch not responding (15)\n"
+                slow_kill $sbatch_pid6
+                set exit_code 1
+        }
+        eof {
+                wait
+        }
+}
+if {$matches != 6} {
+        send_user "$matches FAILURE: batch submit failure (F). (15).\n"
+        exit 1
+}
+
+#
+# Use scontrol to check the status of the FIRST job (1) (check that it has been updated properly)
+#
+set match_job_state 0
+spawn $scontrol show job $job_id1
+expect {
+        "JobState=RUNNING" {
+                incr match_job_state
+                exp_continue
+        }
+        -re "Workflow ID=$job_id1" {
+                incr match_job_state
+                exp_continue
+        }
+        "Start=1" {
+                incr match_job_state
+                exp_continue
+        }
+        "PRIOR=(null)" {
+                incr match_job_state
+                exp_continue
+        }
+        -re "POST=$job_id2,$job_id4,$job_id6" {
+                incr match_job_state
+                exp_continue
+        }
+        "End=0" {
+                incr match_job_state
+                exp_continue
+        }
+        timeout {
+                send_user "\nFAILURE: scontrol not responding ($job_id1) (16)\n"
+                cancel_job $job_id1
+                set exit_code 2
+        }
+        eof {
+                wait
+        }
+}
+if {$match_job_state != 6} {
+        send_user "$match_job_state FAILURE: ($job_id1) invalid workflow; (F) Start job has wrong Workflow details (16).\n"
+        exit 1
+}
+send_user "SUCCESS: (1) Main job has been properly UPDATED POST details.\n"
+
+#
+# Use scontrol to check the status of the THIRD job (3) (check that it has been updated properly)
+#
+set match_job_state 0
+spawn $scontrol show job $job_id3
+expect {
+        "JobState=PENDING" {
+                incr match_job_state
+                exp_continue
+        }
+        "Reason=Workflows" {
+                incr match_job_state
+                exp_continue
+        }
+        -re "Workflow ID=$job_id1" {
+                incr match_job_state
+                exp_continue
+        }
+        "Start=0" {
+                incr match_job_state
+                exp_continue
+        }
+        -re "PRIOR=$job_id2" {
+                incr match_job_state
+                exp_continue
+        }
+        -re "POST=$job_id5,$job_id6" {
+                incr match_job_state
+                exp_continue
+        }
+        "End=0" {
+                incr match_job_state
+                exp_continue
+        }
+        timeout {
+                send_user "\nFAILURE: scontrol not responding ($job_id3) (17)\n"
+                cancel_job $job_id3
+                set exit_code 2
+        }
+        eof {
+                wait
+        }
+}
+if {$match_job_state != 7} {
+        send_user "$match_job_state FAILURE: ($job_id3) invalid workflow; (F) Correct POST/PRIOR details (17).\n"
+        exit 1
+}
+send_user "SUCCESS: (3) Third job has been properly UPDATED POST details.\n"
+
+#
+# Use scontrol to check the status of the SIXTH job (6) (check that it has been updated properly)
+#
+set match_job_state 0
+spawn $scontrol show job $job_id6
+expect {
+        "JobState=PENDING" {
+                incr match_job_state
+                exp_continue
+        }
+        -re "Workflow ID=$job_id1" {
+                incr match_job_state
+                exp_continue
+        }
+        "Start=0" {
+                incr match_job_state
+                exp_continue
+        }
+        -re "PRIOR=$job_id1,$job_id3" {
+                incr match_job_state
+                exp_continue
+        }
+        "POST=(null)" {
+                incr match_job_state
+                exp_continue
+        }
+        "End=0" {
+                incr match_job_state
+                exp_continue
+        }
+        timeout {
+                send_user "\nFAILURE: scontrol not responding ($job_id6) (18)\n"
+                cancel_job $job_id6
+                set exit_code 2
+        }
+        eof {
+                wait
+        }
+}
+if {$match_job_state != 6} {
+        send_user "$match_job_state FAILURE: ($job_id6) invalid workflow; (F) Correct POST/PRIOR details (18).\n"
+        exit 1
+}
+send_user "SUCCESS: (6) Sixth job has been properly UPDATED POST details.\n"
+
+
+wait_for_job $job_id1 DONE
+#
+# G. Submit a workflow job with an invalid PRIOR (sbatch)
+#
+set sbatch_pid7 [spawn $sbatch --workflow-prior-dependency=$job_id1 --job-name="7>1" --output=/dev/null --error=/dev/null -t1 $file_in1]
+expect {
+        "sbatch: error: Batch job submission failed: Invalid Prior dependency workflow job id" {
+                incr matches
+        }
+        timeout {
+                send_user "\nFAILURE: sbatch not responding ($job_id7) (19) \n"
+                slow_kill $sbatch_pid7
+                incr exit_code
+        }
+        eof {
+                wait
+        }
+}
+if {$matches != 7} {
+        send_user "\n ($matches) FAILURE: invalid workflow; (B) START and END sbatch submit failure (G) (19)\n"
+        exit 1
+}
+send_user "\nNo worries. This error is expected\n"
+send_user "SUCCESS: (7) Seventh job has been declined.\n"
+
+#
+# H. Use scontrol to check the status of the jobs (6) (check that it has been updated properly)
+#
+#
+# Use scontrol to check the status of the SECOND job (2)
+#
+set match_job_state 0
+spawn $scontrol show job $job_id2
+expect {
+        "JobState=RUNNING" {
+                incr match_job_state
+                exp_continue
+        }
+        -re "Workflow ID=$job_id1" {
+                incr match_job_state
+                exp_continue
+        }
+        "Start=0" {
+                incr match_job_state
+                exp_continue
+        }
+        -re "PRIOR=$job_id1" {
+                incr match_job_state
+                exp_continue
+        }
+        -re "POST=$job_id3" {
+                incr match_job_state
+                exp_continue
+        }
+        "End=0" {
+                incr match_job_state
+                exp_continue
+        }
+        timeout {
+                send_user "\nFAILURE: scontrol not responding ($job_id2) (20)\n"
+                cancel_job $job_id2
+                set exit_code 2
+        }
+        eof {
+                wait
+        }
+}
+if {$match_job_state != 6} {
+        send_user "$match_job_state FAILURE: ($job_id2) invalid workflow; (H) Child Job is not PENDING due to Workflows or has wrong Workflow details (20).\n"
+        exit 1
+}
+send_user "SUCCESS: (2>1) Second job is CORRECT.\n"
+
+#
+# Use scontrol to check the status of the THIRD job (3)
+#
+set match_job_state 0
+spawn $scontrol show job $job_id3
+expect {
+        "JobState=PENDING" {
+                incr match_job_state
+                exp_continue
+        }
+        "Reason=Workflows" {
+                incr match_job_state
+                exp_continue
+        }
+        -re "Workflow ID=$job_id1" {
+                incr match_job_state
+                exp_continue
+        }
+        "Start=0" {
+                incr match_job_state
+                exp_continue
+        }
+        -re "PRIOR=$job_id2" {
+                incr match_job_state
+                exp_continue
+        }
+        -re "POST=$job_id5,$job_id6" {
+                incr match_job_state
+                exp_continue
+        }
+        "End=0" {
+                incr match_job_state
+                exp_continue
+        }
+        timeout {
+                send_user "\nFAILURE: scontrol not responding ($job_id3) (21)\n"
+                cancel_job $job_id3
+                set exit_code 2
+        }
+        eof {
+                wait
+        }
+}
+if {$match_job_state != 7} {
+        send_user "$match_job_state FAILURE: ($job_id3) invalid workflow; (H) Child Job is not PENDING due to Workflows or has wrong Workflow details (21).\n"
+        exit 1
+}
+send_user "SUCCESS: (3>2>1) Second job is CORRECT.\n"
+
+#
+# Use scontrol to check the status of the FOURTH job (4)
+#
+set match_job_state 0
+spawn $scontrol show job $job_id4
+expect {
+        "JobState=RUNNING" {
+                incr match_job_state
+                exp_continue
+        }
+        -re "Workflow ID=$job_id1" {
+                incr match_job_state
+                exp_continue
+        }
+        "Start=0" {
+                incr match_job_state
+                exp_continue
+        }
+        -re "PRIOR=$job_id1" {
+                incr match_job_state
+                exp_continue
+        }
+        "POST=(null)" {
+                incr match_job_state
+                exp_continue
+        }
+        "End=1" {
+                incr match_job_state
+                exp_continue
+        }
+        timeout {
+                send_user "\nFAILURE: scontrol not responding ($job_id4) (22)\n"
+                cancel_job $job_id4
+                set exit_code 2
+        }
+        eof {
+                wait
+        }
+}
+if {$match_job_state != 6} {
+        send_user "$match_job_state FAILURE: ($job_id4) invalid workflow; (H) Child Job is not PENDING due to Workflows or has wrong Workflow details (22).\n"
+        exit 1
+}
+send_user "SUCCESS: (4>1) Second job is CORRECT.\n"
+
+#
+# I. Submit a workflow job with to an ENDED workflow (sbatch)
+#
+set sbatch_pid8 [spawn $sbatch --workflow-prior-dependency=$job_id4 --job-name="8>4" --output=/dev/null --error=/dev/null -t1 $file_in1]
+expect {
+        "sbatch: error: Batch job submission failed: Invalid Prior dependency workflow job id" {
+                incr matches
+        }
+        timeout {
+                send_user "\nFAILURE: sbatch not responding ($job_id8) (23) \n"
+                slow_kill $sbatch_pid8
+                incr exit_code
+        }
+        eof {
+                wait
+        }
+}
+if {$matches != 8} {
+        send_user "\n ($matches) FAILURE: invalid workflow; (B) START and END sbatch submit failure (I) (23)\n"
+        exit 1
+}
+send_user "\nNo worries. This error is expected\n"
+send_user "SUCCESS: (8) Eighth job has been declined.\n"
+
+if {$matches == 8} {
+	wait_for_job $job_id6 DONE
+	exec $bin_rm -f $file_in1
+        print_success $test_id
+	exit 0
+}
+
+exit 1
+

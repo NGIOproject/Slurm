@@ -1,0 +1,130 @@
+#!/bin/bash
+# Emulate ipmctl (Intel's MOBO interface) for testing purposes
+# Use cases:
+# ipmctl show -system -capabilities
+# ipmctl show -topology
+# ipmctl show -region
+# ipmctl show -memoryresources
+# ipmctl show -dimm -performance
+#
+
+if [ "${1}" == "show" -a "${2}" == "-system" -a "${3}" == "-capabilities" -a "$HOSTNAME" == "slurm-compute1" ]; then
+   echo ''
+   echo ''
+   echo 'PlatformConfigSupported=1'
+   echo 'Alignment=1.0 GiB'
+   echo 'AllowedVolatileMode=Memory Mode'
+   echo 'CurrentVolatileMode=Memory Mode'
+   echo 'AllowedAppDirectMode=App Direct'
+   exit 0
+fi
+
+if [ "${1}" == "show" -a "${2}" == "-system" -a "${3}" == "-capabilities" -a "$HOSTNAME" == "slurm-compute2" ]; then
+   echo ''
+   echo ''
+   echo 'PlatformConfigSupported=1'
+   echo 'Alignment=1.0 GiB'
+   echo 'AllowedVolatileMode=Memory Mode'
+   echo 'CurrentVolatileMode=1LM'
+   echo 'AllowedAppDirectMode=App Direct'
+   exit 0
+fi
+
+if [ "${1}" == "show" -a "${2}" == "-region" -a "$HOSTNAME" == "slurm-compute1" ]; then
+   echo ''
+   echo 'There are no Regions defined in the system.'
+   exit 0
+fi
+
+if [ "${1}" == "show" -a "${2}" == "-region" -a "$HOSTNAME" == "slurm-compute2" ]; then
+   echo ''
+   echo ' SocketID | ISetID             | PersistentMemoryType | Capacity   | FreeCapacity | HealthState' 
+   echo '================================================================================================'
+   echo ' 0x0000   | 0x1bcc7f488a642ccc | AppDirect            | 1512.0 GiB | 0.0 GiB      | Healthy'
+   echo ' 0x0001   | 0xd6ec7f48f5702ccc | AppDirect            | 1512.0 GiB | 0.0 GiB      | Healthy'
+   exit 0
+fi
+
+if [ "${1}" == "show" -a "${2}" == "-memoryresources" -a "$HOSTNAME" == "slurm-compute1" ]; then
+   echo ''
+   echo 'Capacity=3029.4 GiB'
+   echo 'MemoryCapacity=3024.0 GiB'
+   echo 'AppDirectCapacity=0.0 GiB'
+   echo 'UnconfiguredCapacity=0.0 GiB'
+   echo 'InaccessibleCapacity=5.4 GiB'
+   echo 'ReservedCapacity=0.0 GiB'
+   exit 0
+fi
+
+if [ "${1}" == "show" -a "${2}" == "-memoryresources" -a "$HOSTNAME" == "slurm-compute2" ]; then
+   echo ''
+   echo 'Capacity=3029.4 GiB'
+   echo 'MemoryCapacity=0.0 GiB'
+   echo 'AppDirectCapacity=3024.0 GiB'
+   echo 'UnconfiguredCapacity=0.0 GiB'
+   echo 'InaccessibleCapacity=5.4 GiB'
+   echo 'ReservedCapacity=0.0 GiB'
+   exit 0
+fi
+
+
+if [ "${1}" == "show" -a "${2}" == "-topology" ]; then
+  echo ''
+  echo ' DimmID | MemoryType                  | Capacity  | PhysicalID| DeviceLocator '
+  echo '=============================================================================='
+  echo ' 0x0001 | Logical Non-Volatile Device | 252.4 GiB | 0x0029    | CPU1_DIMM_A2'
+  echo ' 0x0101 | Logical Non-Volatile Device | 252.4 GiB | 0x0037    | CPU1_DIMM_D2'
+  echo ' 0x1001 | Logical Non-Volatile Device | 252.4 GiB | 0x0045    | CPU2_DIMM_A2'
+  echo ' 0x1101 | Logical Non-Volatile Device | 252.4 GiB | 0x0053    | CPU2_DIMM_D2'
+  echo ' 0x0011 | Logical Non-Volatile Device | 252.4 GiB | 0x002d    | CPU1_DIMM_B2'
+  echo ' 0x0111 | Logical Non-Volatile Device | 252.4 GiB | 0x003b    | CPU1_DIMM_E2'
+  echo ' 0x1011 | Logical Non-Volatile Device | 252.4 GiB | 0x0049    | CPU2_DIMM_B2'
+  echo ' 0x1111 | Logical Non-Volatile Device | 252.4 GiB | 0x0057    | CPU2_DIMM_E2'
+  echo ' 0x0021 | Logical Non-Volatile Device | 252.4 GiB | 0x0031    | CPU1_DIMM_C2'
+  echo ' 0x0121 | Logical Non-Volatile Device | 252.4 GiB | 0x003f    | CPU1_DIMM_F2'
+  echo ' 0x1021 | Logical Non-Volatile Device | 252.4 GiB | 0x004d    | CPU2_DIMM_C2'
+  echo ' 0x1121 | Logical Non-Volatile Device | 252.4 GiB | 0x005b    | CPU2_DIMM_F2'
+  echo ' N/A    | DDR4                        | 16.0 GiB  | 0x0027    | CPU1_DIMM_A1'
+  echo ' N/A    | DDR4                        | 16.0 GiB  | 0x002b    | CPU1_DIMM_B1'
+  echo ' N/A    | DDR4                        | 16.0 GiB  | 0x002f    | CPU1_DIMM_C1'
+  echo ' N/A    | DDR4                        | 16.0 GiB  | 0x0035    | CPU1_DIMM_D1'
+  echo ' N/A    | DDR4                        | 16.0 GiB  | 0x0039    | CPU1_DIMM_E1'
+  echo ' N/A    | DDR4                        | 16.0 GiB  | 0x003d    | CPU1_DIMM_F1'
+  echo ' N/A    | DDR4                        | 16.0 GiB  | 0x0043    | CPU2_DIMM_A1'
+  echo ' N/A    | DDR4                        | 16.0 GiB  | 0x0047    | CPU2_DIMM_B1'
+  echo ' N/A    | DDR4                        | 16.0 GiB  | 0x004b    | CPU2_DIMM_C1'
+  echo ' N/A    | DDR4                        | 16.0 GiB  | 0x0051    | CPU2_DIMM_D1'
+  echo ' N/A    | DDR4                        | 16.0 GiB  | 0x0055    | CPU2_DIMM_E1'
+  echo ' N/A    | DDR4                        | 16.0 GiB  | 0x0059    | CPU2_DIMM_F1'
+  exit 0
+fi
+
+if [ "${1}" == "show" -a "${2}" == "-dimm" -a "${3}" == "-performance" ]; then
+  echo ''
+  echo '---DimmID=0x0001---'
+  echo '   MediaReads=0x00000000000000000000004d44dc62b8'
+  echo '   MediaWrites=0x00000000000000000000001d8ab9c53c'
+  echo '   ReadRequests=0x00000000000000000000002732d07a8a'
+  echo '   WriteRequests=0x000000000000000000000012c4f76daa'
+  echo '   TotalMediaReads=0x000000000000000000000e94654e67e0'
+  echo '   TotalMediaWrites=0x00000000000000000000056eca83fa9c'
+  echo '   TotalReadRequests=0x00000000000000000000071636846ccf'
+  echo '   TotalWriteRequests=0x00000000000000000000041cbfc73677'
+  echo '---DimmID=0x0101---'
+  echo '   MediaReads=0x00000000000000000000004c9e36b6e8'
+  echo '   MediaWrites=0x00000000000000000000001d45f596b4'
+  echo '   ReadRequests=0x00000000000000000000002715b311dd'
+  echo '   WriteRequests=0x000000000000000000000012bf6ce0f0'
+  echo '   TotalMediaReads=0x000000000000000000000eb019064580'
+  echo '   TotalMediaWrites=0x00000000000000000000057a11d96aa8'
+  echo '   TotalReadRequests=0x000000000000000000000723f29c4d1f'
+  echo '   TotalWriteRequests=0x00000000000000000000042774e77d9c'
+  exit 0
+fi
+
+if [ "${1}" == "/bcs" ]; then
+   exit 0
+fi
+
+echo 'Invalid argument'
+exit 1
