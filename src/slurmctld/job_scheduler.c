@@ -1203,6 +1203,14 @@ static int _schedule(uint32_t job_limit)
 	static int sched_timeout = 0;
 	static int sched_max_job_start = 0;
 	static int bf_min_age_reserve = 0;
+	static int metascheduler_bumped_limit = 0;  // How many times can a job get deprioritised
+	static int metascheduler_1LM_pending_jobs = 0; // Minimum number of 1LM pending jobs
+	static int metascheduler_2LM_pending_jobs = 0; // Minimum number of 2LM pending jobs
+	static int metascheduler_1LM_pending_jobs_ratio = 0; // How many times more 2LM jobs are required to deprioritise 1LM jobs
+	static int metascheduler_2LM_pending_jobs_ratio = 0; // How many times more 1LM jobs are required to deprioritise 2LM jobs
+	static float metascheduler_1LM_priority_multiplier = 0; // depriority multiplier for 1LM jobs
+	static float metascheduler_2LM_priority_multiplier = 0; // depriority multiplier for 2LM jobs
+	static int deprioritse_jobs = 0;
 	static uint32_t bf_min_prio_reserve = 0;
 	static int def_job_limit = 100;
 	static int max_jobs_per_part = 0;
@@ -1264,6 +1272,70 @@ static int _schedule(uint32_t job_limit)
 			}
 		} else {
 			batch_sched_delay = 3;
+		}
+
+		// NEXTGenIO
+		metascheduler_bumped_limit = 5;	// How many times can a job get deprioritised
+		if (sched_params &&
+			(tmp_ptr = strstr(sched_params, "metascheduler_bumped_limit="))) {
+			/*                               123456789012345678901234567 */
+			int task_cnt = atoi(tmp_ptr + 27);
+			if (task_cnt > 0)
+				metascheduler_bumped_limit = task_cnt;
+		}
+
+		metascheduler_1LM_pending_jobs = 5; // Minimum number of 1LM pending jobs
+		if (sched_params &&
+			(tmp_ptr = strstr(sched_params, "metascheduler_1LM_pending_jobs="))) {
+			/*                               1234567890123456789012345678901 */
+			int task_cnt = atoi(tmp_ptr + 31);
+			if (task_cnt > 0)
+				metascheduler_1LM_pending_jobs = task_cnt;
+		}
+
+		metascheduler_1LM_pending_jobs_ratio = 3; // How many times more 2LM jobs are required to deprioritise 1LM jobs
+		if (sched_params &&
+			(tmp_ptr = strstr(sched_params, "metascheduler_1LM_pending_jobs_ratio="))) {
+			/*                               1234567890123456789012345678901234567 */
+			int task_cnt = atoi(tmp_ptr + 37);
+			if (task_cnt > 0)
+				metascheduler_1LM_pending_jobs_ratio = task_cnt;
+		}
+
+		metascheduler_2LM_pending_jobs = 5; // Minimum number of 2LM pending jobs
+		if (sched_params &&
+			(tmp_ptr = strstr(sched_params, "metascheduler_2LM_pending_jobs="))) {
+			/*                               1234567890123456789012345678901 */
+			int task_cnt = atoi(tmp_ptr + 31);
+			if (task_cnt > 0)
+				metascheduler_2LM_pending_jobs = task_cnt;
+		}
+
+		metascheduler_2LM_pending_jobs_ratio = 3; // How many times more 1LM jobs are required to deprioritise 2LM jobs
+		if (sched_params &&
+			(tmp_ptr = strstr(sched_params, "metascheduler_2LM_pending_jobs_ratio="))) {
+			/*                               1234567890123456789012345678901234567 */
+			int task_cnt = atoi(tmp_ptr + 37);
+			if (task_cnt > 0)
+				metascheduler_2LM_pending_jobs_ratio = task_cnt;
+		}
+
+		metascheduler_1LM_priority_multiplier = 0.8; // depriority multiplier for 1LM jobs
+		if (sched_params &&
+			(tmp_ptr = strstr(sched_params, "metascheduler_1LM_priority_multiplier="))) {
+			/*                               12345678901234567890123456789012345678 */
+			float task_cnt = atof(tmp_ptr + 38);
+			if (task_cnt > 0.0)
+				metascheduler_1LM_priority_multiplier = task_cnt;
+		}
+
+		metascheduler_2LM_priority_multiplier = 0.8; // depriority multiplier for 2LM jobs
+		if (sched_params &&
+			(tmp_ptr = strstr(sched_params, "metascheduler_2LM_priority_multiplier="))) {
+			/*                               12345678901234567890123456789012345678 */
+			float task_cnt = atof(tmp_ptr + 38);
+			if (task_cnt > 0.0)
+				metascheduler_2LM_priority_multiplier = task_cnt;
 		}
 
 		bb_array_stage_cnt = 10;
@@ -1571,6 +1643,64 @@ static int _schedule(uint32_t job_limit)
 		slurmctld_diag_stats.schedule_queue_len = list_count(job_queue);
 		sort_job_queue(job_queue);
 	}
+
+	/* NEXTGenIO */
+	int nodes_in_1LM = 0, pending_1LM_jobs = 0, pending_1LM_nodes = 0;
+	int nodes_in_2LM = 0, pending_2LM_jobs = 0, pending_2LM_nodes = 0;
+	deprioritse_jobs = 0;
+	if (xstrcmp(slurmctld_conf.metascheduler, "optimise-for-energy") == 0) {
+		bitstr_t *tmp_bitmap;
+
+		tmp_bitmap = build_active_feature_bitmap2("1LM");
+		nodes_in_1LM = bit_set_count(tmp_bitmap);
+		if (tmp_bitmap) {
+			bit_free(tmp_bitmap);
+		}
+		tmp_bitmap = build_active_feature_bitmap2("2LM");
+		nodes_in_2LM = bit_set_count(tmp_bitmap);
+		if (tmp_bitmap) {
+			bit_free(tmp_bitmap);
+		}
+
+		// Have a forward look into the Job Queue.
+		ListIterator itr2 = list_iterator_create(job_list);
+		struct job_record *job_ptr2 = NULL;
+		while ((job_ptr2 = list_next(itr2))) {
+			if (job_ptr2->job_state != 0) // If not pending continue
+				continue;
+
+			if (job_ptr2->nvram_mode == 1) {
+				pending_1LM_jobs++;
+				pending_1LM_nodes += job_ptr2->details->min_nodes;
+			}
+			if (job_ptr2->nvram_mode == 2) {
+				pending_2LM_jobs++;
+				pending_2LM_nodes += job_ptr2->details->min_nodes;
+			}
+		}
+		list_iterator_destroy(itr2);
+
+		sched_debug3("%s: MetaScheduler: nodes in 1LM:%d, 2LM:%d, Jobs in Queue:%d, pending 1LM jobs:%d asking for 1LM nodes:%d; pending 2LM jobs:%d asking for 2LM nodes:%d.",
+					__func__, nodes_in_1LM, nodes_in_2LM, slurmctld_diag_stats.schedule_queue_len,
+					pending_1LM_jobs, pending_1LM_nodes, pending_2LM_jobs, pending_2LM_nodes);
+
+		if ( pending_1LM_jobs > (pending_2LM_jobs * metascheduler_2LM_pending_jobs_ratio)
+				&& ( pending_1LM_jobs > metascheduler_1LM_pending_jobs)
+				&& ( pending_2LM_nodes > nodes_in_2LM)) {
+			deprioritse_jobs = 2;
+		} else if ( pending_2LM_jobs > (pending_1LM_jobs * metascheduler_1LM_pending_jobs_ratio)
+				&& ( pending_2LM_jobs > metascheduler_2LM_pending_jobs)
+				&& ( pending_1LM_nodes > nodes_in_1LM)) {
+			deprioritse_jobs = 1;
+		} else
+			deprioritse_jobs = 0;
+
+		if ( deprioritse_jobs != 0 )
+			sched_debug3("%s: MetaScheduler: de-prioritise %dLM jobs.", __func__, deprioritse_jobs);
+		else
+			sched_debug3("%s: MetaScheduler: inactive.", __func__);
+	}
+
 	while (1) {
 		if (fifo_sched) {
 			if (job_ptr && part_iterator &&
@@ -1726,6 +1856,118 @@ next_task:
 		}
 
 		slurmctld_diag_stats.schedule_cycle_depth++;
+
+		/* NEXTGenIO */
+		if (job_ptr->nvram_mode != NO_VAL16) {
+			sched_debug3("%s: JobId=%u: is asking for NVRAM mode=%u, Size=%u, Priority=%d.",
+					__func__, job_ptr->job_id, job_ptr->nvram_mode, job_ptr->nvram_size, job_ptr->priority);
+		}
+
+		if (job_ptr->workflow_prior_dependency) {
+			sched_debug3("%s: JobId=%u: Part of workflow (priority:%d) (PRIOR_DEP:%s) (WORKFLOW_ID:%u).",
+					__func__, job_ptr->job_id, job_ptr->priority, job_ptr->workflow_prior_dependency, job_ptr->workflow_id);
+
+			char *job_str_tmp = NULL, *tok, *save_ptr = NULL, *end_ptr = NULL;
+			bool exit_loop = false, exit_loop_and_continue = false;
+			long int long_id;
+			uint32_t job_id = 0;
+
+			// Iterate through all PRIOR dependencies of current job
+			job_str_tmp = xstrdup(job_ptr->workflow_prior_dependency);
+			tok = strtok_r(job_str_tmp, ",", &save_ptr);
+			while (tok && (exit_loop == false) ) {
+				long_id = strtol(tok, &end_ptr, 10);
+				if ((long_id <= 0) ||
+				    ((end_ptr[0] != '\0') && (end_ptr[0] != '_'))) {
+					info("%s: invalid job id %s", __func__, tok);
+					continue;
+				}
+
+				job_id = (uint32_t) long_id;
+				struct job_record *job_ptr2 = find_job_record(job_id);
+				if (job_ptr2) {
+					sched_debug3("%s:        PRIOR sched: JobId=%u. State=%s. Reason=%s. "
+						   "Priority=%u. Partition=%s.",
+						   __func__, job_ptr2->job_id,
+						   job_state_string(job_ptr2->job_state),
+						   job_reason_string(job_ptr2->state_reason),
+						   job_ptr2->priority, job_ptr2->partition);
+					if ( IS_JOB_CANCELLED(job_ptr2) || IS_JOB_FAILED(job_ptr2) ) {
+						job_ptr->job_state = JOB_CANCELLED;
+						job_ptr->state_reason = FAIL_WORKFLOWS;
+						job_ptr->exit_code = 1;
+						job_ptr->start_time = job_ptr->end_time = now;
+						job_ptr->priority = 0;
+						last_job_update = now;
+						xfree(job_ptr->state_desc);
+						xfree(job_ptr2->state_desc);
+						srun_allocate_abort(job_ptr);
+						job_completion_logger(job_ptr, false);
+						sched_debug3("sched: JobId=%u. State=%s. Reason=%s. "
+								"Priority=%u. Partition=%s. FAILED",
+								job_ptr->job_id,
+								job_state_string(job_ptr->job_state),
+								job_reason_string(job_ptr->state_reason),
+								job_ptr->priority, job_ptr->partition);
+						exit_loop = true;
+						exit_loop_and_continue = true;
+					}
+					else if (IS_JOB_RUNNING(job_ptr2) || IS_JOB_PENDING(job_ptr2)) {
+						job_ptr->state_reason = WAIT_WORKFLOWS;
+						last_job_update = now;
+						xfree(job_ptr->state_desc);
+						xfree(job_ptr2->state_desc);
+						sched_debug3("sched: JobId=%u. State=%s. Reason=%s. "
+								"Priority=%u. Partition=%s.",
+								job_ptr->job_id,
+								job_state_string(job_ptr->job_state),
+								job_reason_string(job_ptr->state_reason),
+								job_ptr->priority, job_ptr->partition);
+						exit_loop = true;
+						exit_loop_and_continue = true;
+					}
+				}
+				tok = strtok_r(NULL, ",", &save_ptr);
+			}
+			xfree(job_str_tmp);
+			if ( exit_loop_and_continue )
+				continue;
+		}
+
+		if ( (xstrcmp(slurmctld_conf.metascheduler, "optimise-for-energy") == 0) && (job_ptr->nvram_mode != NO_VAL16)
+			&& (deprioritse_jobs != 0) ) {
+			int old_job_priority = 0;
+			bool exit_loop_and_continue = false;
+
+			if ( (job_ptr->nvram_mode == 1) && (deprioritse_jobs == 1) ) {
+				if (job_ptr->bumped < metascheduler_bumped_limit) {
+					// Reduce this job's priority.
+					old_job_priority = job_ptr->priority;
+					job_ptr->priority = job_ptr->priority * metascheduler_1LM_priority_multiplier;
+					job_ptr->bumped += 1;
+					exit_loop_and_continue = true;
+				} else {
+					sched_debug3("%s: MetaScheduler: Cannot bump job_id:%u any more (%d)",
+							__func__, job_ptr->job_id, job_ptr->bumped);
+				}
+			} else if ( (job_ptr->nvram_mode == 2) && (deprioritse_jobs == 2) ) {
+				if (job_ptr->bumped < metascheduler_bumped_limit) {
+					// Reduce this job's priority.
+					old_job_priority = job_ptr->priority;
+					job_ptr->priority = job_ptr->priority * metascheduler_2LM_priority_multiplier;
+					job_ptr->bumped += 1;
+					exit_loop_and_continue = true;
+				} else {
+					sched_debug3("%s: MetaScheduler: Cannot bump job_id:%u any more (%d)",
+							__func__, job_ptr->job_id, job_ptr->bumped);
+				}
+			}
+			if ( exit_loop_and_continue ) {
+				sched_debug2("%s: MetaScheduler: job_id:%u, New job priority: %d (old priority:%d) (bumped:%d)",
+						__func__, job_ptr->job_id, job_ptr->priority, old_job_priority, job_ptr->bumped);
+				continue;
+			}
+		}
 
 		if (job_ptr->resv_name) {
 			bool found_resv = false;
@@ -2451,6 +2693,14 @@ static batch_job_launch_msg_t *_build_launch_job_msg(struct job_record *job_ptr,
 	}
 	launch_msg_ptr->account = xstrdup(job_ptr->account);
 	launch_msg_ptr->resv_name = xstrdup(job_ptr->resv_name);
+
+	// NEXTGenIO
+	launch_msg_ptr->filesystem_device     = xstrdup(job_ptr->details->filesystem_device);
+	launch_msg_ptr->filesystem_type       = xstrdup(job_ptr->details->filesystem_type);
+	launch_msg_ptr->filesystem_mountpoint = xstrdup(job_ptr->details->filesystem_mountpoint);
+	launch_msg_ptr->filesystem_size       = xstrdup(job_ptr->details->filesystem_size);
+	launch_msg_ptr->service_type          = xstrdup(job_ptr->details->service_type);
+	launch_msg_ptr->optimise_for_energy   = job_ptr->details->optimise_for_energy;
 
 	return launch_msg_ptr;
 }

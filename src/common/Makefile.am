@@ -90,6 +90,7 @@ libcommon_la_SOURCES = 			\
 	slurm_acct_gather_profile.c slurm_acct_gather_profile.h \
 	slurm_acct_gather_interconnect.c slurm_acct_gather_interconnect.h \
 	slurm_acct_gather_filesystem.c slurm_acct_gather_filesystem.h \
+	slurm_acct_gather_nvram.c slurm_acct_gather_nvram.h \
 	slurm_jobcomp.c slurm_jobcomp.h	\
 	slurm_opt.h			\
 	slurm_route.c slurm_route.h	\
@@ -151,7 +152,11 @@ libspank_la_SOURCES = \
 
 libcommon_la_LIBADD   = $(DL_LIBS)
 
+if WITH_JSON_PARSER
+libcommon_la_LDFLAGS  = $(LIB_LDFLAGS) $(JSON_LDFLAGS) -module --export-dynamic
+else
 libcommon_la_LDFLAGS  = $(LIB_LDFLAGS) -module --export-dynamic
+endif
 
 # This was made so we could export all symbols from libcommon
 # on multiple platforms

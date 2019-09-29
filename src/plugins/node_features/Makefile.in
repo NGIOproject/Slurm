@@ -484,7 +484,7 @@ target_vendor = @target_vendor@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-SUBDIRS = knl_cray knl_generic
+SUBDIRS = knl_cray knl_generic nvram_generic
 all: all-recursive
 
 .SUFFIXES:

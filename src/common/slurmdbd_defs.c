@@ -1082,6 +1082,8 @@ extern void slurmdbd_free_job_complete_msg(dbd_job_comp_msg_t *msg)
 		xfree(msg->nodes);
 		xfree(msg->system_comment);
 		xfree(msg->tres_alloc_str);
+		xfree(msg->workflow_prior_dependency);
+		xfree(msg->workflow_post_dependency);
 		xfree(msg);
 	}
 }

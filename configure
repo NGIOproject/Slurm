@@ -901,12 +901,19 @@ INSTALL_DATA
 INSTALL_SCRIPT
 INSTALL_PROGRAM
 SLURM_VERSION_STRING
+SLURM_VERSION_STRING_NEXTGenIO
 RELEASE
+RELEASE_NEXTGenIO
 SLURM_MICRO
 SLURM_MINOR
 SLURM_MAJOR
 SLURM_VERSION_NUMBER
+SLURM_MICRO_NEXTGenIO
+SLURM_MINOR_NEXTGenIO
+SLURM_MAJOR_NEXTGenIO
+SLURM_VERSION_NUMBER_NEXTGenIO
 VERSION
+VERSION_NEXTGenIO
 SLURM_API_REVISION
 SLURM_API_AGE
 SLURM_API_MAJOR
@@ -2994,11 +3001,13 @@ _ACEOF
 
 # rpm make target needs Version in META, not major and minor version numbers
 VERSION="`perl -ne 'print,exit if s/^\s*VERSION:\s*(\S*).*/\1/i' $srcdir/META`"
+VERSION_NEXTGenIO="`perl -ne 'print,exit if s/^\s*VERSION_NEXTGenIO:\s*(\S*).*/\1/i' $srcdir/META`"
 # If you ever use AM_INIT_AUTOMAKE(subdir-objects) do not define VERSION
 # since it will do it this automatically
 
 cat >>confdefs.h <<_ACEOF
 #define VERSION "$VERSION"
+#define VERSION_NEXTGenIO "$VERSION_NEXTGenIO"
 _ACEOF
 
 
@@ -3007,14 +3016,20 @@ SLURM_MAJOR="`perl -ne 'print,exit if s/^\s*MAJOR:\s*(\S*).*/\1/i' $srcdir/META`
 SLURM_MINOR="`perl -ne 'print,exit if s/^\s*MINOR:\s*(\S*).*/\1/i' $srcdir/META`"
 SLURM_MICRO="`perl -ne 'print,exit if s/^\s*MICRO:\s*(\S*).*/\1/i' $srcdir/META`"
 RELEASE="`perl -ne 'print,exit if s/^\s*RELEASE:\s*(\S*).*/\1/i' $srcdir/META`"
+SLURM_MAJOR_NEXTGenIO="`perl -ne 'print,exit if s/^\s*MAJOR_NEXTGenIO:\s*(\S*).*/\1/i' $srcdir/META`"
+SLURM_MINOR_NEXTGenIO="`perl -ne 'print,exit if s/^\s*MINOR_NEXTGenIO:\s*(\S*).*/\1/i' $srcdir/META`"
+SLURM_MICRO_NEXTGenIO="`perl -ne 'print,exit if s/^\s*MICRO_NEXTGenIO:\s*(\S*).*/\1/i' $srcdir/META`"
+RELEASE_NEXTGenIO="`perl -ne 'print,exit if s/^\s*RELEASE_NEXTGenIO:\s*(\S*).*/\1/i' $srcdir/META`"
 
-# NOTE: SLURM_VERSION_NUMBER excludes any non-numeric component
+# NOTE: SLURM_VERSION_NUMBER SLURM_VERSION_NUMBER_NEXTGenIO exclude any non-numeric component
 # (e.g. "pre1" in the MICRO), but may be suitable for the user determining
 # how to use the APIs or other differences.
 SLURM_VERSION_NUMBER="`printf "0x%02x%02x%02x" ${SLURM_MAJOR#0} ${SLURM_MINOR#0} ${SLURM_MICRO#0}`"
+SLURM_VERSION_NUMBER_NEXTGenIO="`printf "0x%02x%02x%02x" ${SLURM_MAJOR_NEXTGenIO#0} ${SLURM_MINOR_NEXTGenIO#0} ${SLURM_MICRO_NEXTGenIO#0}`"
 
 cat >>confdefs.h <<_ACEOF
 #define SLURM_VERSION_NUMBER $SLURM_VERSION_NUMBER
+#define SLURM_VERSION_NUMBER_NEXTGenIO $SLURM_VERSION_NUMBER_NEXTGenIO
 _ACEOF
 
 
@@ -3022,30 +3037,40 @@ _ACEOF
 if test "$SLURM_MAJOR.$SLURM_MINOR.$SLURM_MICRO" != "$VERSION"; then
     as_fn_error $? "META information is inconsistent: $VERSION != $SLURM_MAJOR.$SLURM_MINOR.$SLURM_MICRO!" "$LINENO" 5
 fi
+if test "$SLURM_MAJOR_NEXTGenIO.$SLURM_MINOR_NEXTGenIO.$SLURM_MICRO_NEXTGenIO" != "$VERSION_NEXTGenIO"; then
+    as_fn_error $? "META information is inconsistent: $VERSION_NEXTGenIO != $SLURM_MAJOR_NEXTGenIO.$SLURM_MINOR_NEXTGenIO.$SLURM_MICRO_NEXTGenIO!" "$LINENO" 5
+fi
+
 
 # Check to see if we're on an unstable branch (no prereleases yet)
 if echo "$RELEASE" | grep -e "UNSTABLE"; then
    DATE=`date +"%Y%m%d%H%M"`
    SLURM_RELEASE="unstable svn build $DATE"
    SLURM_VERSION_STRING="$SLURM_MAJOR.$SLURM_MINOR ($SLURM_RELEASE)"
+   SLURM_VERSION_STRING_NEXTGenIO="$SLURM_MAJOR_NEXTGenIO.$SLURM_MINOR_NEXTGenIO ($SLURM_RELEASE)"
 else
    SLURM_RELEASE="`echo $RELEASE | sed 's/^0\.//'`"
    SLURM_VERSION_STRING="$SLURM_MAJOR.$SLURM_MINOR.$SLURM_MICRO"
+   SLURM_VERSION_STRING_NEXTGenIO="$SLURM_MAJOR_NEXTGenIO.$SLURM_MINOR_NEXTGenIO.$SLURM_MICRO_NEXTGenIO"
    test $RELEASE = "1" || SLURM_VERSION_STRING="$SLURM_VERSION_STRING-$SLURM_RELEASE"
+   test $RELEASE = "1" || SLURM_VERSION_STRING_NEXTGenIO="$SLURM_VERSION_STRING_NEXTGenIO-$SLURM_RELEASE"
 fi
 
 cat >>confdefs.h <<_ACEOF
 #define SLURM_MAJOR "$SLURM_MAJOR"
+#define SLURM_MAJOR_NEXTGenIO "$SLURM_MAJOR_NEXTGenIO"
 _ACEOF
 
 
 cat >>confdefs.h <<_ACEOF
 #define SLURM_MINOR "$SLURM_MINOR"
+#define SLURM_MINOR_NEXTGenIO "$SLURM_MINOR_NEXTGenIO"
 _ACEOF
 
 
 cat >>confdefs.h <<_ACEOF
 #define SLURM_MICRO "$SLURM_MICRO"
+#define SLURM_MICRO_NEXTGenIO "$SLURM_MICRO_NEXTGenIO"
 _ACEOF
 
 
@@ -3056,6 +3081,7 @@ _ACEOF
 
 cat >>confdefs.h <<_ACEOF
 #define SLURM_VERSION_STRING "$SLURM_VERSION_STRING"
+#define SLURM_VERSION_STRING_NEXTGenIO "$SLURM_VERSION_STRING_NEXTGenIO"
 _ACEOF
 
 
@@ -25192,7 +25218,7 @@ $as_echo "${x_ac_deprecated=no}" >&6; }
 
 
 
-ac_config_files="$ac_config_files Makefile auxdir/Makefile contribs/Makefile contribs/cray/Makefile contribs/cray/csm/Makefile contribs/cray/slurmsmwd/Makefile contribs/lua/Makefile contribs/mic/Makefile contribs/pam/Makefile contribs/pam_slurm_adopt/Makefile contribs/perlapi/Makefile contribs/perlapi/libslurm/Makefile contribs/perlapi/libslurm/perl/Makefile.PL contribs/perlapi/libslurmdb/Makefile contribs/perlapi/libslurmdb/perl/Makefile.PL contribs/seff/Makefile contribs/torque/Makefile contribs/openlava/Makefile contribs/sgather/Makefile contribs/sgi/Makefile contribs/sjobexit/Makefile contribs/pmi/Makefile contribs/pmi2/Makefile doc/Makefile doc/man/Makefile doc/man/man1/Makefile doc/man/man3/Makefile doc/man/man5/Makefile doc/man/man8/Makefile doc/html/Makefile doc/html/configurator.html doc/html/configurator.easy.html etc/Makefile src/Makefile src/api/Makefile src/bcast/Makefile src/common/Makefile src/db_api/Makefile src/layouts/Makefile src/layouts/power/Makefile src/layouts/unit/Makefile src/database/Makefile src/sacct/Makefile src/sacctmgr/Makefile src/sreport/Makefile src/salloc/Makefile src/sbatch/Makefile src/sbcast/Makefile src/sattach/Makefile src/scancel/Makefile src/scontrol/Makefile src/sdiag/Makefile src/sinfo/Makefile src/slurmctld/Makefile src/slurmd/Makefile src/slurmd/common/Makefile src/slurmd/slurmd/Makefile src/slurmd/slurmstepd/Makefile src/slurmdbd/Makefile src/smap/Makefile src/sprio/Makefile src/squeue/Makefile src/srun/Makefile src/srun/libsrun/Makefile src/srun_cr/Makefile src/sshare/Makefile src/sstat/Makefile src/strigger/Makefile src/sview/Makefile src/plugins/Makefile src/plugins/accounting_storage/Makefile src/plugins/accounting_storage/common/Makefile src/plugins/accounting_storage/filetxt/Makefile src/plugins/accounting_storage/mysql/Makefile src/plugins/accounting_storage/none/Makefile src/plugins/accounting_storage/slurmdbd/Makefile src/plugins/acct_gather_energy/Makefile src/plugins/acct_gather_energy/cray/Makefile src/plugins/acct_gather_energy/rapl/Makefile src/plugins/acct_gather_energy/ibmaem/Makefile src/plugins/acct_gather_energy/ipmi/Makefile src/plugins/acct_gather_energy/none/Makefile src/plugins/acct_gather_energy/xcc/Makefile src/plugins/acct_gather_interconnect/Makefile src/plugins/acct_gather_interconnect/ofed/Makefile src/plugins/acct_gather_interconnect/none/Makefile src/plugins/acct_gather_filesystem/Makefile src/plugins/acct_gather_filesystem/lustre/Makefile src/plugins/acct_gather_filesystem/none/Makefile src/plugins/acct_gather_profile/Makefile src/plugins/acct_gather_profile/hdf5/Makefile src/plugins/acct_gather_profile/hdf5/sh5util/Makefile src/plugins/acct_gather_profile/influxdb/Makefile src/plugins/acct_gather_profile/none/Makefile src/plugins/auth/Makefile src/plugins/auth/munge/Makefile src/plugins/auth/none/Makefile src/plugins/burst_buffer/Makefile src/plugins/burst_buffer/common/Makefile src/plugins/burst_buffer/cray/Makefile src/plugins/burst_buffer/generic/Makefile src/plugins/checkpoint/Makefile src/plugins/checkpoint/blcr/Makefile src/plugins/checkpoint/blcr/cr_checkpoint.sh src/plugins/checkpoint/blcr/cr_restart.sh src/plugins/checkpoint/none/Makefile src/plugins/checkpoint/ompi/Makefile src/plugins/core_spec/Makefile src/plugins/core_spec/cray/Makefile src/plugins/core_spec/none/Makefile src/plugins/crypto/Makefile src/plugins/crypto/munge/Makefile src/plugins/crypto/openssl/Makefile src/plugins/ext_sensors/Makefile src/plugins/ext_sensors/rrd/Makefile src/plugins/ext_sensors/none/Makefile src/plugins/gres/Makefile src/plugins/gres/common/Makefile src/plugins/gres/gpu/Makefile src/plugins/gres/nic/Makefile src/plugins/gres/mic/Makefile src/plugins/jobacct_gather/Makefile src/plugins/jobacct_gather/common/Makefile src/plugins/jobacct_gather/linux/Makefile src/plugins/jobacct_gather/cgroup/Makefile src/plugins/jobacct_gather/none/Makefile src/plugins/jobcomp/Makefile src/plugins/jobcomp/elasticsearch/Makefile src/plugins/jobcomp/filetxt/Makefile src/plugins/jobcomp/none/Makefile src/plugins/jobcomp/script/Makefile src/plugins/jobcomp/mysql/Makefile src/plugins/job_container/Makefile src/plugins/job_container/cncu/Makefile src/plugins/job_container/none/Makefile src/plugins/job_submit/Makefile src/plugins/job_submit/all_partitions/Makefile src/plugins/job_submit/cray/Makefile src/plugins/job_submit/defaults/Makefile src/plugins/job_submit/logging/Makefile src/plugins/job_submit/lua/Makefile src/plugins/job_submit/partition/Makefile src/plugins/job_submit/pbs/Makefile src/plugins/job_submit/require_timelimit/Makefile src/plugins/job_submit/throttle/Makefile src/plugins/launch/Makefile src/plugins/launch/aprun/Makefile src/plugins/launch/poe/Makefile src/plugins/launch/slurm/Makefile src/plugins/mcs/Makefile src/plugins/mcs/account/Makefile src/plugins/mcs/group/Makefile src/plugins/mcs/none/Makefile src/plugins/mcs/user/Makefile src/plugins/node_features/Makefile src/plugins/node_features/knl_cray/Makefile src/plugins/node_features/knl_generic/Makefile src/plugins/power/Makefile src/plugins/power/common/Makefile src/plugins/power/cray/Makefile src/plugins/power/none/Makefile src/plugins/preempt/Makefile src/plugins/preempt/none/Makefile src/plugins/preempt/partition_prio/Makefile src/plugins/preempt/qos/Makefile src/plugins/priority/Makefile src/plugins/priority/basic/Makefile src/plugins/priority/multifactor/Makefile src/plugins/proctrack/Makefile src/plugins/proctrack/cray/Makefile src/plugins/proctrack/cgroup/Makefile src/plugins/proctrack/pgid/Makefile src/plugins/proctrack/linuxproc/Makefile src/plugins/proctrack/sgi_job/Makefile src/plugins/proctrack/lua/Makefile src/plugins/route/Makefile src/plugins/route/default/Makefile src/plugins/route/topology/Makefile src/plugins/sched/Makefile src/plugins/sched/backfill/Makefile src/plugins/sched/builtin/Makefile src/plugins/sched/hold/Makefile src/plugins/select/Makefile src/plugins/select/alps/Makefile src/plugins/select/alps/libalps/Makefile src/plugins/select/alps/libemulate/Makefile src/plugins/select/cons_res/Makefile src/plugins/select/cray/Makefile src/plugins/select/linear/Makefile src/plugins/select/other/Makefile src/plugins/select/serial/Makefile src/plugins/slurmctld/Makefile src/plugins/slurmctld/nonstop/Makefile src/plugins/switch/Makefile src/plugins/switch/cray/Makefile src/plugins/switch/generic/Makefile src/plugins/switch/none/Makefile src/plugins/switch/nrt/Makefile src/plugins/switch/nrt/libpermapi/Makefile src/plugins/mpi/Makefile src/plugins/mpi/none/Makefile src/plugins/mpi/openmpi/Makefile src/plugins/mpi/pmi2/Makefile src/plugins/mpi/pmix/Makefile src/plugins/task/Makefile src/plugins/task/affinity/Makefile src/plugins/task/cgroup/Makefile src/plugins/task/cray/Makefile src/plugins/task/none/Makefile src/plugins/topology/Makefile src/plugins/topology/3d_torus/Makefile src/plugins/topology/hypercube/Makefile src/plugins/topology/node_rank/Makefile src/plugins/topology/none/Makefile src/plugins/topology/tree/Makefile testsuite/Makefile testsuite/expect/Makefile testsuite/slurm_unit/Makefile testsuite/slurm_unit/api/Makefile testsuite/slurm_unit/api/manual/Makefile testsuite/slurm_unit/common/Makefile testsuite/slurm_unit/common/slurm_protocol_pack/Makefile testsuite/slurm_unit/common/slurmdb_pack/Makefile"
+ac_config_files="$ac_config_files Makefile auxdir/Makefile contribs/Makefile contribs/cray/Makefile contribs/cray/csm/Makefile contribs/cray/slurmsmwd/Makefile contribs/lua/Makefile contribs/mic/Makefile contribs/pam/Makefile contribs/pam_slurm_adopt/Makefile contribs/perlapi/Makefile contribs/perlapi/libslurm/Makefile contribs/perlapi/libslurm/perl/Makefile.PL contribs/perlapi/libslurmdb/Makefile contribs/perlapi/libslurmdb/perl/Makefile.PL contribs/seff/Makefile contribs/torque/Makefile contribs/openlava/Makefile contribs/sgather/Makefile contribs/sgi/Makefile contribs/sjobexit/Makefile contribs/pmi/Makefile contribs/pmi2/Makefile doc/Makefile doc/man/Makefile doc/man/man1/Makefile doc/man/man3/Makefile doc/man/man5/Makefile doc/man/man8/Makefile doc/html/Makefile doc/html/configurator.html doc/html/configurator.easy.html etc/Makefile src/Makefile src/api/Makefile src/bcast/Makefile src/common/Makefile src/db_api/Makefile src/layouts/Makefile src/layouts/power/Makefile src/layouts/unit/Makefile src/database/Makefile src/sacct/Makefile src/sacctmgr/Makefile src/sreport/Makefile src/salloc/Makefile src/sbatch/Makefile src/sbcast/Makefile src/sattach/Makefile src/scancel/Makefile src/scontrol/Makefile src/sdiag/Makefile src/sinfo/Makefile src/slurmctld/Makefile src/slurmd/Makefile src/slurmd/common/Makefile src/slurmd/slurmd/Makefile src/slurmd/slurmstepd/Makefile src/slurmdbd/Makefile src/smap/Makefile src/sprio/Makefile src/squeue/Makefile src/srun/Makefile src/srun/libsrun/Makefile src/srun_cr/Makefile src/sshare/Makefile src/sstat/Makefile src/strigger/Makefile src/sview/Makefile src/plugins/Makefile src/plugins/accounting_storage/Makefile src/plugins/accounting_storage/common/Makefile src/plugins/accounting_storage/filetxt/Makefile src/plugins/accounting_storage/mysql/Makefile src/plugins/accounting_storage/none/Makefile src/plugins/accounting_storage/slurmdbd/Makefile src/plugins/acct_gather_energy/Makefile src/plugins/acct_gather_energy/cray/Makefile src/plugins/acct_gather_energy/rapl/Makefile src/plugins/acct_gather_energy/ibmaem/Makefile src/plugins/acct_gather_energy/ipmi/Makefile src/plugins/acct_gather_energy/none/Makefile src/plugins/acct_gather_energy/xcc/Makefile src/plugins/acct_gather_interconnect/Makefile src/plugins/acct_gather_interconnect/ofed/Makefile src/plugins/acct_gather_interconnect/none/Makefile src/plugins/acct_gather_filesystem/Makefile src/plugins/acct_gather_filesystem/lustre/Makefile src/plugins/acct_gather_filesystem/none/Makefile src/plugins/acct_gather_nvram/Makefile src/plugins/acct_gather_nvram/intel/Makefile src/plugins/acct_gather_nvram/none/Makefile src/plugins/acct_gather_profile/Makefile src/plugins/acct_gather_profile/hdf5/Makefile src/plugins/acct_gather_profile/hdf5/sh5util/Makefile src/plugins/acct_gather_profile/influxdb/Makefile src/plugins/acct_gather_profile/none/Makefile src/plugins/auth/Makefile src/plugins/auth/munge/Makefile src/plugins/auth/none/Makefile src/plugins/burst_buffer/Makefile src/plugins/burst_buffer/common/Makefile src/plugins/burst_buffer/cray/Makefile src/plugins/burst_buffer/generic/Makefile src/plugins/checkpoint/Makefile src/plugins/checkpoint/blcr/Makefile src/plugins/checkpoint/blcr/cr_checkpoint.sh src/plugins/checkpoint/blcr/cr_restart.sh src/plugins/checkpoint/none/Makefile src/plugins/checkpoint/ompi/Makefile src/plugins/core_spec/Makefile src/plugins/core_spec/cray/Makefile src/plugins/core_spec/none/Makefile src/plugins/crypto/Makefile src/plugins/crypto/munge/Makefile src/plugins/crypto/openssl/Makefile src/plugins/ext_sensors/Makefile src/plugins/ext_sensors/rrd/Makefile src/plugins/ext_sensors/none/Makefile src/plugins/gres/Makefile src/plugins/gres/common/Makefile src/plugins/gres/gpu/Makefile src/plugins/gres/nic/Makefile src/plugins/gres/mic/Makefile src/plugins/jobacct_gather/Makefile src/plugins/jobacct_gather/common/Makefile src/plugins/jobacct_gather/linux/Makefile src/plugins/jobacct_gather/cgroup/Makefile src/plugins/jobacct_gather/none/Makefile src/plugins/jobcomp/Makefile src/plugins/jobcomp/elasticsearch/Makefile src/plugins/jobcomp/filetxt/Makefile src/plugins/jobcomp/none/Makefile src/plugins/jobcomp/script/Makefile src/plugins/jobcomp/mysql/Makefile src/plugins/job_container/Makefile src/plugins/job_container/cncu/Makefile src/plugins/job_container/none/Makefile src/plugins/job_submit/Makefile src/plugins/job_submit/all_partitions/Makefile src/plugins/job_submit/cray/Makefile src/plugins/job_submit/defaults/Makefile src/plugins/job_submit/logging/Makefile src/plugins/job_submit/lua/Makefile src/plugins/job_submit/partition/Makefile src/plugins/job_submit/pbs/Makefile src/plugins/job_submit/require_timelimit/Makefile src/plugins/job_submit/throttle/Makefile src/plugins/launch/Makefile src/plugins/launch/aprun/Makefile src/plugins/launch/poe/Makefile src/plugins/launch/slurm/Makefile src/plugins/mcs/Makefile src/plugins/mcs/account/Makefile src/plugins/mcs/group/Makefile src/plugins/mcs/none/Makefile src/plugins/mcs/user/Makefile src/plugins/node_features/Makefile src/plugins/node_features/knl_cray/Makefile src/plugins/node_features/knl_generic/Makefile src/plugins/node_features/nvram_generic/Makefile src/plugins/power/Makefile src/plugins/power/common/Makefile src/plugins/power/cray/Makefile src/plugins/power/none/Makefile src/plugins/preempt/Makefile src/plugins/preempt/none/Makefile src/plugins/preempt/partition_prio/Makefile src/plugins/preempt/qos/Makefile src/plugins/priority/Makefile src/plugins/priority/basic/Makefile src/plugins/priority/multifactor/Makefile src/plugins/priority/multifactorworkflows/Makefile src/plugins/proctrack/Makefile src/plugins/proctrack/cray/Makefile src/plugins/proctrack/cgroup/Makefile src/plugins/proctrack/pgid/Makefile src/plugins/proctrack/linuxproc/Makefile src/plugins/proctrack/sgi_job/Makefile src/plugins/proctrack/lua/Makefile src/plugins/route/Makefile src/plugins/route/default/Makefile src/plugins/route/topology/Makefile src/plugins/sched/Makefile src/plugins/sched/backfill/Makefile src/plugins/sched/builtin/Makefile src/plugins/sched/hold/Makefile src/plugins/select/Makefile src/plugins/select/alps/Makefile src/plugins/select/alps/libalps/Makefile src/plugins/select/alps/libemulate/Makefile src/plugins/select/cons_res/Makefile src/plugins/select/cray/Makefile src/plugins/select/linear/Makefile src/plugins/select/other/Makefile src/plugins/select/serial/Makefile src/plugins/slurmctld/Makefile src/plugins/slurmctld/nonstop/Makefile src/plugins/switch/Makefile src/plugins/switch/cray/Makefile src/plugins/switch/generic/Makefile src/plugins/switch/none/Makefile src/plugins/switch/nrt/Makefile src/plugins/switch/nrt/libpermapi/Makefile src/plugins/mpi/Makefile src/plugins/mpi/none/Makefile src/plugins/mpi/openmpi/Makefile src/plugins/mpi/pmi2/Makefile src/plugins/mpi/pmix/Makefile src/plugins/task/Makefile src/plugins/task/affinity/Makefile src/plugins/task/cgroup/Makefile src/plugins/task/cray/Makefile src/plugins/task/none/Makefile src/plugins/topology/Makefile src/plugins/topology/3d_torus/Makefile src/plugins/topology/hypercube/Makefile src/plugins/topology/node_rank/Makefile src/plugins/topology/none/Makefile src/plugins/topology/tree/Makefile testsuite/Makefile testsuite/expect/Makefile testsuite/slurm_unit/Makefile testsuite/slurm_unit/api/Makefile testsuite/slurm_unit/api/manual/Makefile testsuite/slurm_unit/common/Makefile testsuite/slurm_unit/common/slurm_protocol_pack/Makefile testsuite/slurm_unit/common/slurmdb_pack/Makefile"
 
 
 cat >confcache <<\_ACEOF
@@ -26564,6 +26590,9 @@ do
     "src/plugins/acct_gather_filesystem/Makefile") CONFIG_FILES="$CONFIG_FILES src/plugins/acct_gather_filesystem/Makefile" ;;
     "src/plugins/acct_gather_filesystem/lustre/Makefile") CONFIG_FILES="$CONFIG_FILES src/plugins/acct_gather_filesystem/lustre/Makefile" ;;
     "src/plugins/acct_gather_filesystem/none/Makefile") CONFIG_FILES="$CONFIG_FILES src/plugins/acct_gather_filesystem/none/Makefile" ;;
+    "src/plugins/acct_gather_nvram/Makefile") CONFIG_FILES="$CONFIG_FILES src/plugins/acct_gather_nvram/Makefile" ;;
+    "src/plugins/acct_gather_nvram/intel/Makefile") CONFIG_FILES="$CONFIG_FILES src/plugins/acct_gather_nvram/intel/Makefile" ;;
+    "src/plugins/acct_gather_nvram/none/Makefile") CONFIG_FILES="$CONFIG_FILES src/plugins/acct_gather_nvram/none/Makefile" ;;
     "src/plugins/acct_gather_profile/Makefile") CONFIG_FILES="$CONFIG_FILES src/plugins/acct_gather_profile/Makefile" ;;
     "src/plugins/acct_gather_profile/hdf5/Makefile") CONFIG_FILES="$CONFIG_FILES src/plugins/acct_gather_profile/hdf5/Makefile" ;;
     "src/plugins/acct_gather_profile/hdf5/sh5util/Makefile") CONFIG_FILES="$CONFIG_FILES src/plugins/acct_gather_profile/hdf5/sh5util/Makefile" ;;
@@ -26632,6 +26661,7 @@ do
     "src/plugins/node_features/Makefile") CONFIG_FILES="$CONFIG_FILES src/plugins/node_features/Makefile" ;;
     "src/plugins/node_features/knl_cray/Makefile") CONFIG_FILES="$CONFIG_FILES src/plugins/node_features/knl_cray/Makefile" ;;
     "src/plugins/node_features/knl_generic/Makefile") CONFIG_FILES="$CONFIG_FILES src/plugins/node_features/knl_generic/Makefile" ;;
+    "src/plugins/node_features/nvram_generic/Makefile") CONFIG_FILES="$CONFIG_FILES src/plugins/node_features/nvram_generic/Makefile" ;;
     "src/plugins/power/Makefile") CONFIG_FILES="$CONFIG_FILES src/plugins/power/Makefile" ;;
     "src/plugins/power/common/Makefile") CONFIG_FILES="$CONFIG_FILES src/plugins/power/common/Makefile" ;;
     "src/plugins/power/cray/Makefile") CONFIG_FILES="$CONFIG_FILES src/plugins/power/cray/Makefile" ;;
@@ -26643,6 +26673,7 @@ do
     "src/plugins/priority/Makefile") CONFIG_FILES="$CONFIG_FILES src/plugins/priority/Makefile" ;;
     "src/plugins/priority/basic/Makefile") CONFIG_FILES="$CONFIG_FILES src/plugins/priority/basic/Makefile" ;;
     "src/plugins/priority/multifactor/Makefile") CONFIG_FILES="$CONFIG_FILES src/plugins/priority/multifactor/Makefile" ;;
+    "src/plugins/priority/multifactorworkflows/Makefile") CONFIG_FILES="$CONFIG_FILES src/plugins/priority/multifactorworkflows/Makefile" ;;
     "src/plugins/proctrack/Makefile") CONFIG_FILES="$CONFIG_FILES src/plugins/proctrack/Makefile" ;;
     "src/plugins/proctrack/cray/Makefile") CONFIG_FILES="$CONFIG_FILES src/plugins/proctrack/cray/Makefile" ;;
     "src/plugins/proctrack/cgroup/Makefile") CONFIG_FILES="$CONFIG_FILES src/plugins/proctrack/cgroup/Makefile" ;;

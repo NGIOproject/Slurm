@@ -24,7 +24,8 @@ libslurmd_common_la_SOURCES =    \
 	set_oomadj.c set_oomadj.h \
 	reverse_tree.h \
 	xcpuinfo.c xcpuinfo.h \
-	xcgroup.c xcgroup.h
+	xcgroup.c xcgroup.h \
+	slurmd_nvram.c slurmd_nvram.h
 
 
 libslurmd_common_la_LDFLAGS  = $(HWLOC_LDFLAGS) $(HWLOC_LIBS)

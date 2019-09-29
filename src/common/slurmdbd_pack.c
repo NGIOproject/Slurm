@@ -419,6 +419,11 @@ static void _pack_job_complete_msg(dbd_job_comp_msg_t *msg,
 		pack_time(msg->submit_time, buffer);
 		packstr(msg->system_comment, buffer);
 		packstr(msg->tres_alloc_str, buffer);
+		pack32(msg->workflow_id, buffer);
+		pack16(msg->workflow_start, buffer);
+		packstr(msg->workflow_prior_dependency, buffer);
+		packstr(msg->workflow_post_dependency, buffer);
+		pack16(msg->workflow_end, buffer);
 	} else if (rpc_version >= SLURM_17_11_PROTOCOL_VERSION) {
 		packstr(msg->admin_comment, buffer);
 		pack32(msg->assoc_id, buffer);
@@ -477,6 +482,13 @@ static int _unpack_job_complete_msg(dbd_job_comp_msg_t **msg,
 				       &uint32_tmp, buffer);
 		safe_unpackstr_xmalloc(&msg_ptr->tres_alloc_str,
 				       &uint32_tmp, buffer);
+		safe_unpack32(&msg_ptr->workflow_id, buffer);
+		safe_unpack16(&msg_ptr->workflow_start, buffer);
+		safe_unpackstr_xmalloc(&msg_ptr->workflow_prior_dependency,
+					   &uint32_tmp, buffer);
+		safe_unpackstr_xmalloc(&msg_ptr->workflow_post_dependency,
+					   &uint32_tmp, buffer);
+		safe_unpack16(&msg_ptr->workflow_end, buffer);
 	} else if (rpc_version >= SLURM_17_11_PROTOCOL_VERSION) {
 		safe_unpackstr_xmalloc(&msg_ptr->admin_comment,
 				       &uint32_tmp, buffer);

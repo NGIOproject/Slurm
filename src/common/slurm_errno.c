@@ -499,7 +499,45 @@ static slurm_errtab_t slurm_errtab[] = {
 	{ ESLURM_MISSING_TIME_LIMIT,
 	  "Time limit specification required, but not provided"	},
 	{ ESLURM_INVALID_KNL,
-	  "Invalid KNL configuration (MCDRAM or NUMA option)"	}
+	  "Invalid KNL configuration (MCDRAM or NUMA option)"	},
+	{ ESLURM_INVALID_NVRAM,
+	  "Invalid NVRAM configuration (mode option)"	},
+
+	/* NEXTGenIO */
+	{ ESLURM_INVALID_WORKFLOW_PRIOR_DEPENDENCY_JOBID,
+	  "Invalid Prior dependency workflow job id"                      },
+	{ ESLURM_INVALID_WORKFLOW_PRIOR_DEPENDENCY_ENDS_WORKFLOW,
+	  "Invalid Prior dependency workflow job id ended workflow"       },
+	{ ESLURM_INVALID_WORKFLOW_PRIOR_DEPENDENCY_CIRCULAR_JOBID,
+	  "Invalid Prior dependency circular workflow job id"             },
+	{ ESLURM_INVALID_WORKFLOW_PRIOR_DEPENDENCY_FINISHED,
+	  "Invalid Prior dependency workflow job id has finished"         },
+	{ ESLURM_INVALID_WORKFLOW_PRIOR_DEPENDENCY_NOT_PART_OF_WORKFLOW,
+	  "Invalid Prior dependency workflow job id is not part of workflow" },
+	{ ESLURM_INVALID_WORKFLOW_PRIOR_DEPENDENCY_PART_OF_MULTIPLE_WORKFLOWS,
+	  "Invalid Prior dependency workflow job id is part of multiple workflows" },
+	{ ESLURM_INVALID_WORKFLOW_PRIOR_DEPENDENCY_INVALID_ACCOUNT,
+	  "Invalid Prior dependency workflow job id invalid account"      },
+	{ ESLURM_INVALID_WORKFLOW_POST_DEPENDENCY_JOBID,
+	  "Invalid Post dependency workflow job id"                       },
+
+	{ ESLURM_NDCTL_CONFIGURE_FAIL,
+	  "Failed to run ndctl"                                           },
+	{ ESLURM_MAKE_FILESYSTEM_FAIL,
+	  "Failed to run mkfs command"                                    },
+	{ ESLURM_MOUNT_FILESYSTEM_FAIL,
+	  "Failed to run mount"                                           },
+	{ ESLURM_FILESYSTEM_START_FAIL,
+	  "Failed to start FileSystem"                                    },
+	{ ESLURM_FILESYSTEM_STOP_FAIL,
+	  "Failed to stop FileSystem"                                     },
+	{ ESLURM_FILESYSTEM_UNKOWN_TYPE,
+	  "Unkownn FileSystem"                                            },
+	{ ESLURM_SERVICE_START_FAIL,
+	  "Failed to start Service"                                       },
+	{ ESLURM_SERVICE_STOP_FAIL,
+	  "Failed to stop Service"                                        }
+
 };
 
 /*

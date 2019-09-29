@@ -1594,20 +1594,20 @@ char *slurm_get_job_slurmctld_logfile(void)
 
 /* slurm_get_node_features_plugins
  * get node_features_plugins from slurmctld_conf object
- * RET char *   - knl_plugins, MUST be xfreed by caller
+ * RET char *   - node_features_plugins, MUST be xfreed by caller
  */
 char *slurm_get_node_features_plugins(void)
 {
-	char *knl_plugins = NULL;
+	char *node_features_plugins = NULL;
 	slurm_ctl_conf_t *conf;
 
 	if (slurmdbd_conf) {
 	} else {
 		conf = slurm_conf_lock();
-		knl_plugins = xstrdup(conf->node_features_plugins);
+		node_features_plugins = xstrdup(conf->node_features_plugins);
 		slurm_conf_unlock();
 	}
-	return knl_plugins;
+	return node_features_plugins;
 }
 
 /* slurm_get_slurmctld_plugstack
@@ -2204,6 +2204,25 @@ char *slurm_get_acct_gather_filesystem_type(void)
 	return acct_gather_filesystem_type;
 }
 
+// NEXTGenIO
+/* slurm_get_nvram_accounting_type
+ * get NVRAMAccountingType from slurmctld_conf object
+ * RET char *   - nvram_accounting type, MUST be xfreed by caller
+ */
+char *slurm_get_acct_gather_nvram_type(void)
+{
+        char *acct_gather_nvram_type = NULL;
+        slurm_ctl_conf_t *conf;
+
+        if (slurmdbd_conf) {
+        } else {
+                conf = slurm_conf_lock();
+                acct_gather_nvram_type =
+                        xstrdup(conf->acct_gather_nvram_type);
+                slurm_conf_unlock();
+        }
+        return acct_gather_nvram_type;
+}
 
 extern uint16_t slurm_get_acct_gather_node_freq(void)
 {
@@ -2972,6 +2991,188 @@ slurm_get_srun_eio_timeout(void)
 		slurm_conf_unlock();
 	}
 	return eio_timeout;
+}
+
+// NEXTGenIO
+/* slurm_get_filesystem_devices
+ * returns the value of devices in slurmctld_conf object
+ * RET char *    - filesystem_devices parameters, MUST be xfreed by caller
+ */
+extern char *slurm_get_filesystem_devices(void)
+{
+	char *filesystem_devices = NULL;
+	slurm_ctl_conf_t *conf;
+
+	if (slurmdbd_conf) {
+	} else {
+		conf = slurm_conf_lock();
+		filesystem_devices = xstrdup(conf->filesystem_devices);
+		slurm_conf_unlock();
+	}
+	return filesystem_devices;
+}
+
+/* slurm_set_filesystem_devices
+ * set filesystem_devices in slurmctld_conf object
+ * RET 0 or error code
+ */
+int slurm_set_filesystem_devices(char *filesystem_devices)
+{
+	slurm_ctl_conf_t *conf;
+
+	if (slurmdbd_conf) {
+	} else {
+		conf = slurm_conf_lock();
+		xfree(conf->filesystem_devices);
+		conf->filesystem_devices = xstrdup(filesystem_devices);
+		slurm_conf_unlock();
+	}
+	return 0;
+}
+
+/* slurm_get_filesystem_types
+ * returns the value of filesystem_types in slurmctld_conf object
+ * RET char *    - filesystem_types parameters, MUST be xfreed by caller
+ */
+extern char *slurm_get_filesystem_types(void)
+{
+	char *filesystem_types = NULL;
+	slurm_ctl_conf_t *conf;
+
+	if (slurmdbd_conf) {
+	} else {
+		conf = slurm_conf_lock();
+		filesystem_types = xstrdup(conf->filesystem_types);
+		slurm_conf_unlock();
+	}
+	return filesystem_types;
+}
+
+/* slurm_set_filesystem_types
+ * set filesystem_types in slurmctld_conf object
+ * RET 0 or error code
+ */
+int slurm_set_filesystem_types(char *filesystem_types)
+{
+	slurm_ctl_conf_t *conf;
+
+	if (slurmdbd_conf) {
+	} else {
+		conf = slurm_conf_lock();
+		xfree(conf->filesystem_types);
+		conf->filesystem_types = xstrdup(filesystem_types);
+		slurm_conf_unlock();
+	}
+	return 0;
+}
+
+/* slurm_get_filesystem_mountpoints
+ * returns the value of filesystem_mountpoints in slurmctld_conf object
+ * RET char *    - filesystem_mountpoints parameters, MUST be xfreed by caller
+ */
+extern char *slurm_get_filesystem_mountpoints(void)
+{
+	char *filesystem_mountpoints = NULL;
+	slurm_ctl_conf_t *conf;
+
+	if (slurmdbd_conf) {
+	} else {
+		conf = slurm_conf_lock();
+		filesystem_mountpoints = xstrdup(conf->filesystem_mountpoints);
+		slurm_conf_unlock();
+	}
+	return filesystem_mountpoints;
+}
+
+/* slurm_set_filesystem_mountpoints
+ * set filesystem_mountpoints in slurmctld_conf object
+ * RET 0 or error code
+ */
+int slurm_set_filesystem_mountpoints(char *filesystem_mountpoints)
+{
+	slurm_ctl_conf_t *conf;
+
+	if (slurmdbd_conf) {
+	} else {
+		conf = slurm_conf_lock();
+		xfree(conf->filesystem_mountpoints);
+		conf->filesystem_mountpoints = xstrdup(filesystem_mountpoints);
+		slurm_conf_unlock();
+	}
+	return 0;
+}
+
+// NEXTGenIO
+/* slurm_get_filesystem_sizes
+ * returns the value of filesystem_sizes in slurmctld_conf object
+ * RET char *    - filesystem_sizes parameters, MUST be xfreed by caller
+ */
+extern char *slurm_get_filesystem_sizes(void)
+{
+	char *filesystem_sizes = NULL;
+	slurm_ctl_conf_t *conf;
+
+	if (slurmdbd_conf) {
+	} else {
+		conf = slurm_conf_lock();
+		filesystem_sizes = xstrdup(conf->filesystem_sizes);
+		slurm_conf_unlock();
+	}
+	return filesystem_sizes;
+}
+
+/* slurm_set_filesystem_sizes
+ * set filesystem_sizes in slurmctld_conf object
+ * RET 0 or error code
+ */
+int slurm_set_filesystem_sizes(char *filesystem_sizes)
+{
+	slurm_ctl_conf_t *conf;
+
+	if (slurmdbd_conf) {
+	} else {
+		conf = slurm_conf_lock();
+		xfree(conf->filesystem_sizes);
+		conf->filesystem_sizes = xstrdup(filesystem_sizes);
+		slurm_conf_unlock();
+	}
+	return 0;
+}
+
+/* slurm_get_service_types
+ * returns the value of service_types in slurmctld_conf object
+ * RET char *    - service_types parameters, MUST be xfreed by caller
+ */
+extern char *slurm_get_service_types(void)
+{
+	char *service_types = NULL;
+	slurm_ctl_conf_t *conf;
+
+	if (slurmdbd_conf) {
+	} else {
+		conf = slurm_conf_lock();
+		service_types = xstrdup(conf->service_types);
+		slurm_conf_unlock();
+	}
+	return service_types;
+}
+
+/* slurm_set_service_types
+ * set service_types in slurmctld_conf object
+ * RET 0 or error code
+ */
+int slurm_set_service_types(char *service_types)
+{
+	slurm_ctl_conf_t *conf;
+
+	if (slurmdbd_conf) {
+	} else {
+		conf = slurm_conf_lock();
+		xfree(conf->service_types);
+		conf->service_types = xstrdup(service_types);
+		slurm_conf_unlock();
+	}
+	return 0;
 }
 
 /* Change general slurm communication errors to slurmctld specific errors */

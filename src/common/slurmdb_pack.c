@@ -5870,6 +5870,7 @@ extern void slurmdb_pack_job_cond(void *in, uint16_t protocol_version,
 			packnull(buffer);	/* used_nodes */
 			pack32(NO_VAL, buffer);	/* count(userid_list) */
 			pack32(NO_VAL, buffer);	/* count(wckey_list) */
+			pack32(NO_VAL, buffer);	/* count(workflow_list) */
 			return;
 		}
 
@@ -6062,6 +6063,20 @@ extern void slurmdb_pack_job_cond(void *in, uint16_t protocol_version,
 		pack32(count, buffer);
 		if (count && (count != NO_VAL)) {
 			itr = list_iterator_create(object->wckey_list);
+			while ((tmp_info = list_next(itr))) {
+				packstr(tmp_info, buffer);
+			}
+			list_iterator_destroy(itr);
+		}
+
+		/* NEXTGenIO */
+		if (object->workflow_list)
+			count = list_count(object->workflow_list);
+		else
+			count = NO_VAL;
+		pack32(count, buffer);
+		if (count && (count != NO_VAL)) {
+			itr = list_iterator_create(object->workflow_list);
 			while ((tmp_info = list_next(itr))) {
 				packstr(tmp_info, buffer);
 			}
@@ -6766,6 +6781,20 @@ extern int slurmdb_unpack_job_cond(void **object, uint16_t protocol_version,
 				list_append(object_ptr->wckey_list, tmp_info);
 			}
 		}
+
+		/* NEXTGenIO */
+		safe_unpack32(&count, buffer);
+		if (count > NO_VAL)
+			goto unpack_error;
+		if (count != NO_VAL) {
+			object_ptr->workflow_list =
+				list_create(slurm_destroy_char);
+			for (i = 0; i < count; i++) {
+				safe_unpackstr_xmalloc(&tmp_info, &uint32_tmp,
+						       buffer);
+				list_append(object_ptr->workflow_list, tmp_info);
+			}
+		}
 	} else if (protocol_version >= SLURM_17_11_PROTOCOL_VERSION) {
 		safe_unpack32(&count, buffer);
 		if (count > NO_VAL)
@@ -7354,6 +7383,12 @@ extern void slurmdb_pack_job_rec(void *object, uint16_t protocol_version,
 		packstr(job->wckey, buffer);
 		pack32(job->wckeyid, buffer);
 		packstr(job->work_dir, buffer);
+		/* NEXTGenIO */
+		pack32(job->workflow_id, buffer);
+		packstr(job->workflow_prior, buffer);
+		packstr(job->workflow_post, buffer);
+		pack16(job->workflow_start, buffer);
+		pack16(job->workflow_end, buffer);
 	} else if (protocol_version >= SLURM_17_11_PROTOCOL_VERSION) {
 		packstr(job->account, buffer);
 		packstr(job->admin_comment, buffer);
@@ -7609,6 +7644,12 @@ extern int slurmdb_unpack_job_rec(void **job, uint16_t protocol_version,
 		safe_unpackstr_xmalloc(&job_ptr->wckey, &uint32_tmp, buffer);
 		safe_unpack32(&job_ptr->wckeyid, buffer);
 		safe_unpackstr_xmalloc(&job_ptr->work_dir, &uint32_tmp, buffer);
+		/* NEXTGenIO */
+		safe_unpack32(&job_ptr->workflow_id, buffer);
+		safe_unpackstr_xmalloc(&job_ptr->workflow_prior, &uint32_tmp, buffer);
+		safe_unpackstr_xmalloc(&job_ptr->workflow_post, &uint32_tmp, buffer);
+		safe_unpack16(&job_ptr->workflow_start, buffer);
+		safe_unpack16(&job_ptr->workflow_end, buffer);
 	} else if (protocol_version >= SLURM_17_11_PROTOCOL_VERSION) {
 		safe_unpackstr_xmalloc(&job_ptr->account, &uint32_tmp, buffer);
 		safe_unpackstr_xmalloc(&job_ptr->admin_comment, &uint32_tmp,

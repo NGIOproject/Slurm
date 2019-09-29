@@ -80,6 +80,7 @@
 #include "src/common/node_select.h"
 #include "src/common/plugstack.h"
 #include "src/common/read_config.h"
+#include "src/common/run_command.h"
 #include "src/common/slurm_auth.h"
 #include "src/common/slurm_cred.h"
 #include "src/common/slurm_acct_gather_energy.h"
@@ -236,6 +237,75 @@ static void _remove_job_running_prolog(uint32_t job_id);
 static int  _match_jobid(void *s0, void *s1);
 static void _wait_for_job_running_prolog(uint32_t job_id);
 static bool _requeue_setup_env_fail(void);
+
+// NEXTGenIO
+static char *_filesystems_run_one_script(char *script_type, char *script_path,
+			   char **script_argv, int max_wait, int *status, uint32_t job_id, struct passwd pwd,
+			   char *filesystem_mountpoint, int node);
+static void _log_script_argv(char **script_argv, char *resp_msg, bool print_debug);
+static int _create_namespace(char* region);
+static int _create_namespaces();
+static int _make_fsdaxes(char* filesystem_type);
+static int _fix_permissions_fsdax(char* filesystem_mountpoint);
+static int _make_fsdax(char* filesystem_type, char* device);
+static int _mount_fsdax(char* filesystem_mountpoint, char* filesystem_device);
+static int _start_filesystem(char* filesystem_type, char* filesystem_device,
+		char* filesystem_mountpoint, char* filesystem_size, uint32_t uid,
+		char* complete_nodelist, uint32_t nnodes, uint32_t job_id);
+static int _fini_gekkofs(kill_job_msg_t *req, uid_t uid);
+static int _start_gekkofs(uint32_t uid, char* complete_nodelist, uint32_t nnodes,
+		char* filesystem_device, char* filesystem_mountpoint, char* filesystem_size, uint32_t job_id);
+//static int _fini_gekkofs_clean_shared_file(kill_job_msg_t *req, struct passwd pwd);
+static int _fini_gekkofs_clean_tmp_filesystem_device_path(char* filesystem_device, struct passwd pwd);
+static int _fini_gekkofs_clean_tmp_filesystem_mountpoint_path(kill_job_msg_t *req);
+static int _fini_gekkofs_clean_filesystem_home_gkfs_hosts(kill_job_msg_t *req, struct passwd pwd);
+static int _fini_gekkofs_clean_filesystem_home_gkfs_server_log(kill_job_msg_t *req, struct passwd pwd);
+static int _fini_gekkofs_clean_filesystem_home_gkfs_client_log(kill_job_msg_t *req, struct passwd pwd);
+static int _fini_gekkofs_clean_filesystem_tmp_gkfs_preload(kill_job_msg_t *req, struct passwd pwd);
+static int _fini_filesystem(kill_job_msg_t *req);
+static int _gekkofs_start_daemon(char* filesystem_mountpoint, char* filesystem_device,
+		uint32_t job_id,	struct passwd pwd, char *nodelist, int node);
+static int _gekkofs_clean_make_filesystem_device_dir(char* filesystem_device, struct passwd pwd,
+		char *nodelist, uint32_t job_id);
+static int _gekkofs_clean_chown_filesystem_device_dir(char* filesystem_device, struct passwd pwd,
+		char *nodelist, uint32_t job_id);
+static int _gekkofs_clean_make_filesystem_mountpoint_dir(char* filesystem_mountpoint, struct passwd pwd,
+		char *nodelist, uint32_t job_id);
+static int _gekkofs_clean_chown_filesystem_mountpoint_dir(char* filesystem_mountpoint, struct passwd pwd,
+		char *nodelist, uint32_t job_id);
+static int _gekkofs_clean_make_filesystem_home_dir(uint32_t job_id, struct passwd pwd);
+static int _gekkofs_clean_chown_filesystem_home_dir(uint32_t job_id, struct passwd pwd);
+static int _gekkofs_clean_tmp_path(char* filesystem_device, uint32_t job_id, struct passwd pwd);
+static int _gekkofs_clean_filesystem_home_gkfs_hosts(uint32_t job_id, struct passwd pwd);
+static int _gekkofs_clean_filesystem_home_gkfs_server_log(uint32_t job_id, struct passwd pwd);
+static int _gekkofs_clean_filesystem_home_gkfs_client_log(uint32_t job_id, struct passwd pwd);
+static int _gekkofs_taskset_daemon(uint32_t job_id, struct passwd pwd, int node);
+
+static int _start_service(char* service_type);
+static int _fini_service(char *service_type);
+static int _service_start_service(char* service_type);
+static int _service_stop_service(char* service_type);
+static int _service_check_service(char* service_type, bool completed_status);
+
+static int _optimise_for_energy_start();
+static int _optimise_for_energy_fini();
+static int _reduce_nvram_power();
+static int _reduce_fan_rpm();
+static int _reduce_hdd_rpm();
+
+#define MKFS_PATH  "/usr/sbin/mkfs"
+#define NDCTL_PATH "/usr/bin/ndctl"
+#define MOUNT_PATH "/usr/bin/mount"
+static pid_t cpid_nextgenio_0 = 0;
+static pid_t cpid_nextgenio_1 = 0;
+static int volatile service_started = 0;
+
+// 0 : Not started
+// 1 : Starting
+// 2 : Started
+static int volatile filesystem_status = 0;
+
+static int volatile optimise_energy_started = 0;
 
 /*
  *  List of threads waiting for jobs to complete
@@ -1582,6 +1652,35 @@ _rpc_launch_tasks(slurm_msg_t *msg)
 		goto done;
 	}
 
+	// NEXTGenIO
+	if (req->filesystem_type) {
+		errnum = _start_filesystem(req->filesystem_type, req->filesystem_device, req->filesystem_mountpoint,
+				req->filesystem_size, req->uid, req->complete_nodelist, req->nnodes, req->job_id);
+		if (errnum != SLURM_SUCCESS) {
+			error("%s: Filesystem was not created. Error %d/%s.",
+					__func__, errnum, slurm_strerror(errnum));
+			goto done;
+		}
+	}
+
+	if (req->service_type) {
+		errnum = _start_service(req->service_type);
+		if (errnum != SLURM_SUCCESS) {
+			error("%s: Service was not started. Error %d/%s.",
+					__func__, errnum, slurm_strerror(errnum));
+			goto done;
+		}
+	}
+
+	if (req->optimise_for_energy) {
+		errnum = _optimise_for_energy_start();
+		if (errnum != SLURM_SUCCESS) {
+			error("%s: Energy optimisations failed. Error %d/%s.",
+					__func__, errnum, slurm_strerror(errnum));
+			goto done;
+		}
+	}
+
 	debug3("_rpc_launch_tasks: call to _forkexec_slurmstepd");
 	errnum = _forkexec_slurmstepd(LAUNCH_TASKS, (void *)req, cli, &self,
 				      step_hset, msg->protocol_version);
@@ -2257,6 +2356,32 @@ static void _rpc_prolog(slurm_msg_t *msg)
 	} else
 		slurm_mutex_unlock(&prolog_mutex);
 
+	// NEXTGenIO
+	if (req->filesystem_type) {
+		rc = _start_filesystem(req->filesystem_type, req->filesystem_device, req->filesystem_mountpoint,
+				req->filesystem_size, req->uid, req->nodes, req->nnodes, req->job_id);
+		if (rc != SLURM_SUCCESS) {
+			error("%s: Filesystem was not created. Error %d/%s.",
+					__func__, rc, slurm_strerror(rc));
+		}
+	}
+
+	if (req->service_type) {
+		rc = _start_service(req->service_type);
+		if (rc != SLURM_SUCCESS) {
+			error("%s: Service was not started. Error %d/%s.",
+					__func__, rc, slurm_strerror(rc));
+		}
+	}
+
+	if (req->optimise_for_energy) {
+		rc = _optimise_for_energy_start();
+		if (rc != SLURM_SUCCESS) {
+			error("%s: Energy optimisations failed. Error %d/%s.",
+					__func__, rc, slurm_strerror(rc));
+		}
+	}
+
 	/*
 	 * We need the slurmctld to know we are done or we can get into a
 	 * situation where nothing from the job will ever launch because the
@@ -2453,6 +2578,36 @@ _rpc_batch_job(slurm_msg_t *msg, bool new_msg)
 		     req->job_id);
 		rc = ESLURMD_CREDENTIAL_REVOKED;     /* job already ran */
 		goto done;
+	}
+
+	// NEXTGenIO
+	if (req->filesystem_type) {
+		rc = _start_filesystem(req->filesystem_type, req->filesystem_device,
+				req->filesystem_mountpoint,	req->filesystem_size, req->uid,
+				req->nodes, 50, req->job_id);
+		if (rc != SLURM_SUCCESS) {
+			error("%s: Filesystem was not created. Error %d/%s.",
+					__func__, rc, slurm_strerror(rc));
+			goto done;
+		}
+	}
+
+	if (req->service_type) {
+		rc = _start_service(req->service_type);
+		if (rc != SLURM_SUCCESS) {
+			error("%s: Service was not started. Error %d/%s.",
+					__func__, rc, slurm_strerror(rc));
+			goto done;
+		}
+	}
+
+	if (req->optimise_for_energy) {
+		rc = _optimise_for_energy_start();
+		if (rc != SLURM_SUCCESS) {
+			error("%s: Energy optimisations failed. Error %d/%s.",
+					__func__, rc, slurm_strerror(rc));
+			goto done;
+		}
 	}
 
 	slurm_mutex_lock(&launch_mutex);
@@ -2749,8 +2904,15 @@ _rpc_reboot(slurm_msg_t *msg)
 				 */
 				info("Node reboot request with features %s being processed",
 				     reboot_msg->features);
-				(void) node_features_g_node_set(
+				exit_code = node_features_g_node_set(
 					reboot_msg->features);
+				if ( exit_code != SLURM_SUCCESS ) {
+					error("%s: Node features set failed. Shutting down.",
+							__func__);
+					slurm_conf_unlock();
+					slurmd_shutdown(SIGTERM);
+					return;
+				}
 				if (reboot_msg->features[0]) {
 					xstrfmtcat(cmd, "%s %s",
 						   sp, reboot_msg->features);
@@ -3879,6 +4041,29 @@ _rpc_timelimit(slurm_msg_t *msg)
 	close(msg->conn_fd);
 	msg->conn_fd = -1;
 
+	// NEXTGenIO
+	if (req->filesystem_mountpoint) {
+		rc = _fini_filesystem(req);
+		if (rc != SLURM_SUCCESS) {
+			error("%s: Filesystem was not destroyed. Error %d/%s.",
+					__func__, rc, slurm_strerror(rc));
+		}
+	}
+	if (req->service_type) {
+		rc = _fini_service(req->service_type);
+		if (rc != SLURM_SUCCESS) {
+			error("%s: Service was not destroyed. Error %d/%s.",
+				__func__, rc, slurm_strerror(rc));
+		}
+	}
+	if (req->optimise_for_energy) {
+		rc = _optimise_for_energy_fini();
+		if (rc != SLURM_SUCCESS) {
+			error("%s: Energy optimisations failed to revert. Error %d/%s.",
+					__func__, rc, slurm_strerror(rc));
+		}
+	}
+
 	if (req->step_id != NO_VAL) {
 		slurm_ctl_conf_t *cf;
 		int delay;
@@ -3922,6 +4107,7 @@ _rpc_timelimit(slurm_msg_t *msg)
 		_kill_all_active_steps(req->job_id, SIG_PREEMPTED, 0, true,
 				       uid);
 	nsteps = _kill_all_active_steps(req->job_id, SIGTERM, 0, false, uid);
+
 	verbose("Job %u: timeout: sent SIGTERM to %d active steps",
 		req->job_id, nsteps);
 
@@ -5154,6 +5340,29 @@ _rpc_abort_job(slurm_msg_t *msg)
 
 	_run_epilog(&job_env);
 
+	// NEXTGenIO
+	if (req->filesystem_mountpoint) {
+		int errnum = _fini_filesystem(req);
+		if (errnum != SLURM_SUCCESS) {
+			error("%s: Filesystem was not destroyed. Error %d/%s.",
+					__func__, errnum, slurm_strerror(errnum));
+		}
+	}
+	if (req->service_type) {
+		int errnum = _fini_service(req->service_type);
+		if (errnum != SLURM_SUCCESS) {
+			error("%s: Service was not destroyed. Error %d/%s.",
+					__func__, errnum, slurm_strerror(errnum));
+		}
+	}
+	if (req->optimise_for_energy) {
+		int errnum = _optimise_for_energy_fini();
+		if (errnum != SLURM_SUCCESS) {
+			error("%s: Energy optimisations failed to revert. Error %d/%s.",
+					__func__, errnum, slurm_strerror(errnum));
+		}
+	}
+
 	if (container_g_delete(req->job_id))
 		error("container_g_delete(%u): %m", req->job_id);
 	_launch_complete_rm(req->job_id);
@@ -5509,6 +5718,32 @@ _rpc_terminate_job(slurm_msg_t *msg)
 		if (conf->plugstack && (stat(conf->plugstack, &stat_buf) == 0))
 			have_spank = true;
 	}
+
+	// NEXTGenIO
+	if (req->filesystem_mountpoint) {
+		rc = _fini_filesystem(req);
+		if (rc != SLURM_SUCCESS) {
+			error("%s: Filesystem was not destroyed. Error %d/%s.",
+					__func__, rc, slurm_strerror(rc));
+		}
+	}
+
+	if (req->service_type) {
+		rc = _fini_service(req->service_type);
+		if (rc != SLURM_SUCCESS) {
+			error("%s: Service was not destroyed. Error %d/%s.",
+					__func__, rc, slurm_strerror(rc));
+		}
+	}
+
+	if (req->optimise_for_energy) {
+		rc = _optimise_for_energy_fini();
+		if (rc != SLURM_SUCCESS) {
+			error("%s: Energy optimisations failed to revert. Error %d/%s.",
+					__func__, rc, slurm_strerror(rc));
+		}
+	}
+
 	/*
 	 *  If there are currently no active job steps and no
 	 *    configured epilog to run, bypass asynchronous reply and
@@ -6636,4 +6871,2288 @@ _requeue_setup_env_fail(void)
 	}
 
 	return requeue;
+}
+
+// NEXTGenIO
+/* Run a command as the user UID; NOT as slurmd. */
+static char *_filesystems_run_one_script(char *script_type, char *script_path,
+			   char **script_argv, int max_wait, int *status, uint32_t job_id, struct passwd pwd,
+			   char *filesystem_mountpoint, int node)
+{
+	pid_t cpid;
+	char *resp = NULL;
+	char buf[100];
+
+	if ((script_path == NULL) || (script_path[0] == '\0')) {
+		error("%s: no script specified", __func__);
+		*status = 127;
+		resp = xstrdup("Run command failed - configuration error");
+		return resp;
+	}
+
+	if (script_path[0] != '/') {
+		error("%s: %s is not fully qualified pathname (%s)",
+		      __func__, script_type, script_path);
+		*status = 127;
+		resp = xstrdup("Run command failed - configuration error");
+		return resp;
+	}
+	if (access(script_path, R_OK | X_OK) < 0) {
+		error("%s: %s can not be executed (%s) %m",
+		      __func__, script_type, script_path);
+		*status = 127;
+		resp = xstrdup("Run command failed - configuration error");
+		return resp;
+	}
+	debug3("%s: attempting to run %s [%s]", __func__, script_type, script_path);
+	if ( max_wait == 0 ) {
+		if ( xstrcmp(script_type, "start_gekkofs") == 0 ) {
+			if ( node == 0 ) {
+				if ( cpid_nextgenio_0 != 0 ) {
+					error("%s: cpid_nextgenio_0 is not 0 (%d).", __func__, cpid_nextgenio_0);
+				}
+				cpid_nextgenio_0 = 0;
+			} else if ( node == 1 ) {
+				if ( cpid_nextgenio_1 != 0 ) {
+					error("%s: cpid_nextgenio_1 is not 0 (%d).", __func__, cpid_nextgenio_1);
+				}
+				cpid_nextgenio_1 = 0;
+			}
+		}
+	}
+
+	if ((cpid = fork()) < 0) {
+		error ("executing %s: fork: %m", script_type);
+		*status = 127;
+		resp = xstrdup("Run command failed - configuration error");
+		return resp;
+	}
+
+	if (cpid == 0) {
+		/* container_g_add_pid needs to be called in the
+		   forked process part of the fork to avoid a race
+		   condition where if this process makes a file or
+		   detacts itself from a child before we add the pid
+		   to the container in the parent of the fork.
+		*/
+		if (container_g_add_pid(job_id, getpid(), getuid())
+		    != SLURM_SUCCESS)
+			error("container_g_add_pid(%u): %m", job_id);
+
+		// If we are starting GekkoFS change to the USER ID. If not; run the command as the SLURMD user.
+		if ( xstrcmp(script_type, "start_gekkofs") == 0 ) {
+			if ( setuid(pwd.pw_uid) != 0 ) {
+				error("%s: failed to set UID to %d.", __func__, pwd.pw_uid);
+				*status = 127;
+				resp = xstrdup("Run command failed - configuration error");
+				return resp;
+			}
+		}
+		setpgid(0, 0);
+
+		// If we are starting GekkoFS modify the environment
+		if ( xstrcmp(script_type, "start_gekkofs") == 0 ) {
+			debug3("%s: Setting environment paths", __func__);
+			char *ld_library_path = NULL, *gkfs_hosts_file = NULL;
+			char *gkfs_server_log_path = NULL, *gkfs_client_log_path = NULL;
+			ld_library_path = getenv("LD_LIBRARY_PATH");
+			if ( ld_library_path != NULL ) {
+				debug3("%s: LD_LIBRARY_PATH was %s.", __func__, ld_library_path);
+				xstrcat(ld_library_path, "/home/nx01/shared/GekkoFS-BSC/0.6slurm/lib:/opt/ohpc/pub/compiler/gcc/8.3.0/lib64/");
+			} else {
+				debug3("%s: LD_LIBRARY_PATH was EMPTY.", __func__);
+				ld_library_path = xstrdup("/home/nx01/shared/GekkoFS-BSC/0.6slurm/lib:/opt/ohpc/pub/compiler/gcc/8.3.0/lib64/");
+			}
+			setenv("LD_LIBRARY_PATH", ld_library_path, 1);
+			debug3("%s: setting LD_LIBRARY_PATH to %s.", __func__, ld_library_path);
+
+			setenv("GKFS_LOG_LEVEL", "1", 1);
+			debug3("%s: setting GKFS_LOG_LEVEL to 1.", __func__);
+
+			gkfs_server_log_path = xstrdup(pwd.pw_dir);
+			xstrcat(gkfs_server_log_path, "/");
+			snprintf(buf, sizeof(buf), "%u", job_id);
+			xstrcat(gkfs_server_log_path, buf);
+			xstrcat(gkfs_server_log_path, "_GEKKOFS/");
+			xstrcat(gkfs_server_log_path, "gkfs_server.log");
+			setenv("GKFS_PRELOAD_LOG_PATH", gkfs_server_log_path, 1);
+			debug3("%s: setting GKFS_PRELOAD_LOG_PATH to %s.", __func__, gkfs_server_log_path);
+
+			gkfs_client_log_path = xstrdup(pwd.pw_dir);
+			xstrcat(gkfs_client_log_path, "/");
+			xstrcat(gkfs_client_log_path, buf);
+			xstrcat(gkfs_client_log_path, "_GEKKOFS/");
+			xstrcat(gkfs_client_log_path, "/gkfs_client.log");
+			setenv("GKFS_DAEMON_LOG_PATH", gkfs_client_log_path, 1);
+			debug3("%s: setting GKFS_DAEMON_LOG_PATH to %s.", __func__, gkfs_client_log_path);
+
+			gkfs_hosts_file = xstrdup(pwd.pw_dir);
+			xstrcat(gkfs_hosts_file, "/");
+			xstrcat(gkfs_hosts_file, buf);
+			xstrcat(gkfs_hosts_file, "_GEKKOFS/");
+			xstrcat(gkfs_hosts_file, "/gkfs_hosts.txt");
+			setenv("GKFS_HOSTS_FILE", gkfs_hosts_file, 1);
+			debug3("%s: setting GKFS_HOSTS_FILE to %s.", __func__, gkfs_hosts_file);
+
+			xfree(ld_library_path);
+			xfree(gkfs_server_log_path);
+			xfree(gkfs_client_log_path);
+			xfree(gkfs_hosts_file);
+		}
+		//extern char** environ;
+		//execve(script_path, script_argv, environ);
+		execv(script_path, script_argv);
+		error("execv(%s): %m", script_path);
+		exit(127);
+	}
+
+	// If we are starting GekkoFS keep a copy of the PID of the GekkoFS daemon and
+	//   do not wait for the forked PID to end. Otherwise, call waitpid_timeout()
+	if ( xstrcmp(script_type, "start_gekkofs") == 0 ) {
+		if ( node == 0 ) {
+			cpid_nextgenio_0 = cpid;
+			debug2("%s: Started GekkoFS (0) with PID:%d.", __func__, cpid_nextgenio_0);
+		}
+		else if ( node == 1 ) {
+			cpid_nextgenio_1 = cpid;
+			debug2("%s: Started GekkoFS (1) with PID:%d.", __func__, cpid_nextgenio_1);
+		}
+	} else 	if (waitpid_timeout(script_type, cpid, status, max_wait) < 0) {
+		error("%s: waitpid_timeout failed.", __func__);
+		*status = 127;
+		resp = xstrdup("Run command failed - configuration error");
+		return resp;
+	}
+
+	*status = SLURM_SUCCESS;
+	resp = xstrdup("");
+	return resp;
+}
+
+// NEXTGenIO
+static int _check_fsdax_namespaces()
+{
+	int status = SLURM_ERROR;
+	char *resp_msg, *tok, *save_ptr = NULL, *tmp = NULL;
+	char **ndctl_argv;
+	bool pass_mode = false, pass_blockdev = false, pass_map = false;
+
+	// ndctl list --namespaces
+	ndctl_argv = xmalloc(sizeof(char *) * 4);
+
+	ndctl_argv[0] = xstrdup("ndctl");
+	ndctl_argv[1] = xstrdup("list");
+	ndctl_argv[2] = xstrdup("--namespaces");
+	ndctl_argv[3] = NULL;
+
+	resp_msg = run_command("ndctl", NDCTL_PATH, ndctl_argv, 10000, &status);
+	free_command_argv(ndctl_argv);
+	if (!WIFEXITED(status) || (WEXITSTATUS(status) != 0)) {
+		error("%s: ndctl (list --namespaces) status:%u response:%s",
+		      __func__, status, resp_msg);
+	}
+	if (resp_msg == NULL) {
+		info("%s: ndctl (list --namespaces) returned no information", __func__);
+	} else {
+		tok = NULL;
+		tok = strtok_r(resp_msg, "\n", &save_ptr);
+
+		while (tok) {
+			if ( xstrstr(tok, "\"mode\":")) {
+				tmp = xstrdup(tok);
+				xstrsubstituteall(tmp, "mode", "");
+				xstrsubstituteall(tmp, ":", "");
+				xstrsubstituteall(tmp, "\"", "");
+				xstrsubstituteall(tmp, " ", "");
+				xstrsubstituteall(tmp, ",", "");
+				if ( xstrcasecmp(tmp, "fsdax") == 0 )
+					pass_mode = true;
+				xfree(tmp);
+				//set_capacity = true;
+			} else if ( xstrstr(tok, "\"blockdev\":")) {
+				tmp = xstrdup(tok);
+				xstrsubstituteall(tmp, "blockdev", "");
+				xstrsubstituteall(tmp, ":", "");
+				xstrsubstituteall(tmp, "\"", "");
+				xstrsubstituteall(tmp, " ", "");
+				xstrsubstituteall(tmp, ",", "");
+				if ( xstrstr(tmp, "pmem") != NULL )
+					pass_blockdev = true;
+				xfree(tmp);
+			} else if ( xstrstr(tok, "\"map\":")) {
+				tmp = xstrdup(tok);
+				xstrsubstituteall(tmp, "map", "");
+				xstrsubstituteall(tmp, ":", "");
+				xstrsubstituteall(tmp, "\"", "");
+				xstrsubstituteall(tmp, " ", "");
+				xstrsubstituteall(tmp, ",", "");
+				if ( xstrcasecmp(tmp, "dev") == 0 )
+					pass_map = true;
+				xfree(tmp);
+			}
+			tok = strtok_r(NULL, "\n", &save_ptr);
+		}
+		xfree(resp_msg);
+	}
+
+	if ( pass_mode && pass_blockdev && pass_map ) {
+		status = SLURM_SUCCESS;
+	} else
+		debug2("%s: pass_mode:%d, pass_blockdev:%d, pass_map:%d.\n",
+				__func__, pass_mode, pass_blockdev, pass_map);
+
+	return status;
+}
+
+// NEXTGenIO
+/*
+static int _fini_gekkofs_clean_shared_file(kill_job_msg_t *req, struct passwd pwd)
+{
+	int status = SLURM_ERROR;
+	char **cleanup_gekkofs_argv;
+	char *cleanup_resp_msg, *sharedfile = NULL;
+	char buf[20];
+
+	cleanup_gekkofs_argv = xmalloc(sizeof(char *) * 10);
+
+	sharedfile = xstrdup(pwd.pw_dir);
+	xstrcat(sharedfile, "/shkey-");
+	snprintf(buf, sizeof(buf), "%u", req->job_id);
+	xstrcat(sharedfile, buf);
+
+	cleanup_gekkofs_argv[0] = xstrdup("rm");
+	cleanup_gekkofs_argv[1] = xstrdup("-f");
+	cleanup_gekkofs_argv[2] = xstrdup(sharedfile);
+	cleanup_gekkofs_argv[3] = NULL;
+
+	debug3("%s: I would have run:", __func__);
+	debug3("   %2d : %s", 0, cleanup_gekkofs_argv[0]);
+	debug3("   %2d : %s", 1, cleanup_gekkofs_argv[1]);
+	debug3("   %2d : %s", 2, cleanup_gekkofs_argv[2]);
+	debug3("   %2d : %s", 3, cleanup_gekkofs_argv[3]);
+	cleanup_resp_msg = run_command("cleanup_gekkofs", "/usr/bin/rm", cleanup_gekkofs_argv, 10000, &status);
+	xfree(sharedfile);
+	if (!WIFEXITED(status) || (WEXITSTATUS(status) != 0)) {
+		error("%s: failed to remove %s / status:%u response:%s",
+			  __func__, cleanup_gekkofs_argv[2], status, cleanup_resp_msg);
+		free_command_argv(cleanup_gekkofs_argv);
+		xfree(cleanup_resp_msg);
+		return SLURM_ERROR;
+	}
+	free_command_argv(cleanup_gekkofs_argv);
+	if (cleanup_resp_msg == NULL) {
+		info("%s: rm returned no information", __func__);
+	} else {
+		debug3("%s: rm returned:%s.", __func__, cleanup_resp_msg);
+	}
+	xfree(cleanup_resp_msg);
+
+	return SLURM_SUCCESS;
+}
+*/
+
+// NEXTGenIO
+static int _fini_gekkofs_clean_filesystem_home_gkfs_client_log(kill_job_msg_t *req, struct passwd pwd)
+{
+	int status = SLURM_ERROR;
+	char **cleanup_gekkofs_argv;
+	char *cleanup_resp_msg, *gkfs_client_log_path = NULL;
+	char buf[100];
+
+	cleanup_gekkofs_argv = xmalloc(sizeof(char *) * 10);
+
+	cleanup_gekkofs_argv[0] = xstrdup("rm");
+	cleanup_gekkofs_argv[1] = xstrdup("-f");
+
+	gkfs_client_log_path = xstrdup(pwd.pw_dir);
+	xstrcat(gkfs_client_log_path, "/");
+	snprintf(buf, sizeof(buf), "%u", req->job_id);
+	xstrcat(gkfs_client_log_path, buf);
+	xstrcat(gkfs_client_log_path, "_GEKKOFS/");
+	xstrcat(gkfs_client_log_path, "gkfs_client.log");
+
+	cleanup_gekkofs_argv[2] = xstrdup(gkfs_client_log_path);
+	cleanup_gekkofs_argv[3] = NULL;
+
+	debug3("%s: I will run:", __func__);
+	debug3("   %2d : %s", 0, cleanup_gekkofs_argv[0]);
+	debug3("   %2d : %s", 1, cleanup_gekkofs_argv[1]);
+	debug3("   %2d : %s", 2, cleanup_gekkofs_argv[2]);
+	debug3("   %2d : %s", 3, cleanup_gekkofs_argv[3]);
+	cleanup_resp_msg = run_command("cleanup_gekkofs", "/usr/bin/rm", cleanup_gekkofs_argv, 10000, &status);
+	xfree(gkfs_client_log_path);
+	if (!WIFEXITED(status) || (WEXITSTATUS(status) != 0)) {
+		error("%s: failed to remove %s / status:%u response:%s",
+			  __func__, cleanup_gekkofs_argv[2], status, cleanup_resp_msg);
+		free_command_argv(cleanup_gekkofs_argv);
+		xfree(cleanup_resp_msg);
+		return SLURM_ERROR;
+	}
+	free_command_argv(cleanup_gekkofs_argv);
+	if (cleanup_resp_msg == NULL) {
+		info("%s: rm returned no information", __func__);
+	} else {
+		debug3("%s: rm returned:%s.", __func__, cleanup_resp_msg);
+	}
+	xfree(cleanup_resp_msg);
+
+	return SLURM_SUCCESS;
+}
+
+// NEXTGenIO
+static int _fini_gekkofs_clean_filesystem_home_gkfs_server_log(kill_job_msg_t *req, struct passwd pwd)
+{
+	int status = SLURM_ERROR;
+	char **cleanup_gekkofs_argv;
+	char *cleanup_resp_msg, *gkfs_server_log_path = NULL;
+	char buf[100];
+
+	cleanup_gekkofs_argv = xmalloc(sizeof(char *) * 10);
+
+	cleanup_gekkofs_argv[0] = xstrdup("rm");
+	cleanup_gekkofs_argv[1] = xstrdup("-f");
+
+	gkfs_server_log_path = xstrdup(pwd.pw_dir);
+	xstrcat(gkfs_server_log_path, "/");
+	snprintf(buf, sizeof(buf), "%u", req->job_id);
+	xstrcat(gkfs_server_log_path, buf);
+	xstrcat(gkfs_server_log_path, "_GEKKOFS/");
+	xstrcat(gkfs_server_log_path, "gkfs_server.log");
+
+	cleanup_gekkofs_argv[2] = xstrdup(gkfs_server_log_path);
+	cleanup_gekkofs_argv[3] = NULL;
+
+	debug3("%s: I will run:", __func__);
+	debug3("   %2d : %s", 0, cleanup_gekkofs_argv[0]);
+	debug3("   %2d : %s", 1, cleanup_gekkofs_argv[1]);
+	debug3("   %2d : %s", 2, cleanup_gekkofs_argv[2]);
+	debug3("   %2d : %s", 3, cleanup_gekkofs_argv[3]);
+	cleanup_resp_msg = run_command("cleanup_gekkofs", "/usr/bin/rm", cleanup_gekkofs_argv, 10000, &status);
+	xfree(gkfs_server_log_path);
+	if (!WIFEXITED(status) || (WEXITSTATUS(status) != 0)) {
+		error("%s: failed to remove %s / status:%u response:%s",
+			  __func__, cleanup_gekkofs_argv[2], status, cleanup_resp_msg);
+		free_command_argv(cleanup_gekkofs_argv);
+		xfree(cleanup_resp_msg);
+		return SLURM_ERROR;
+	}
+	free_command_argv(cleanup_gekkofs_argv);
+	if (cleanup_resp_msg == NULL) {
+		info("%s: rm returned no information", __func__);
+	} else {
+		debug3("%s: rm returned:%s.", __func__, cleanup_resp_msg);
+	}
+	xfree(cleanup_resp_msg);
+
+	return SLURM_SUCCESS;
+}
+
+// NEXTGenIO
+static int _fini_gekkofs_clean_filesystem_tmp_gkfs_preload(kill_job_msg_t *req, struct passwd pwd)
+{
+	int status = SLURM_ERROR;
+	char **cleanup_gekkofs_argv;
+	char *cleanup_resp_msg;
+
+	cleanup_gekkofs_argv = xmalloc(sizeof(char *) * 10);
+
+	cleanup_gekkofs_argv[0] = xstrdup("rm");
+	cleanup_gekkofs_argv[1] = xstrdup("-f");
+	cleanup_gekkofs_argv[2] = xstrdup("/tmp/gkfs_preload.log");
+	cleanup_gekkofs_argv[3] = NULL;
+
+	debug3("%s: I will run:", __func__);
+	debug3("   %2d : %s", 0, cleanup_gekkofs_argv[0]);
+	debug3("   %2d : %s", 1, cleanup_gekkofs_argv[1]);
+	debug3("   %2d : %s", 2, cleanup_gekkofs_argv[2]);
+	debug3("   %2d : %s", 3, cleanup_gekkofs_argv[3]);
+	cleanup_resp_msg = run_command("cleanup_gekkofs_preload", "/usr/bin/rm", cleanup_gekkofs_argv, 10000, &status);
+	if (!WIFEXITED(status) || (WEXITSTATUS(status) != 0)) {
+		error("%s: failed to remove %s / status:%u response:%s",
+			  __func__, cleanup_gekkofs_argv[2], status, cleanup_resp_msg);
+		free_command_argv(cleanup_gekkofs_argv);
+		xfree(cleanup_resp_msg);
+		return SLURM_ERROR;
+	}
+	free_command_argv(cleanup_gekkofs_argv);
+	if (cleanup_resp_msg == NULL) {
+		info("%s: rm returned no information", __func__);
+	} else {
+		debug3("%s: rm returned:%s.", __func__, cleanup_resp_msg);
+	}
+	xfree(cleanup_resp_msg);
+
+	return SLURM_SUCCESS;
+}
+
+// NEXTGenIO
+static int _fini_gekkofs_clean_filesystem_home_gkfs_hosts(kill_job_msg_t *req, struct passwd pwd)
+{
+	int status = SLURM_ERROR;
+	char **cleanup_gekkofs_argv;
+	char *cleanup_resp_msg, *gkfs_hosts_path = NULL;
+	char buf[100];
+
+	cleanup_gekkofs_argv = xmalloc(sizeof(char *) * 10);
+
+	cleanup_gekkofs_argv[0] = xstrdup("rm");
+	cleanup_gekkofs_argv[1] = xstrdup("-f");
+
+	gkfs_hosts_path = xstrdup(pwd.pw_dir);
+	xstrcat(gkfs_hosts_path, "/");
+	snprintf(buf, sizeof(buf), "%u", req->job_id);
+	xstrcat(gkfs_hosts_path, buf);
+	xstrcat(gkfs_hosts_path, "_GEKKOFS/");
+	xstrcat(gkfs_hosts_path, "gkfs_hosts.txt");
+	cleanup_gekkofs_argv[2] = xstrdup(gkfs_hosts_path);
+	cleanup_gekkofs_argv[3] = NULL;
+
+	debug3("%s: I will run:", __func__);
+	debug3("   %2d : %s", 0, cleanup_gekkofs_argv[0]);
+	debug3("   %2d : %s", 1, cleanup_gekkofs_argv[1]);
+	debug3("   %2d : %s", 2, cleanup_gekkofs_argv[2]);
+	debug3("   %2d : %s", 3, cleanup_gekkofs_argv[3]);
+	cleanup_resp_msg = run_command("cleanup_gekkofs", "/usr/bin/rm", cleanup_gekkofs_argv, 10000, &status);
+	xfree(gkfs_hosts_path);
+	if (!WIFEXITED(status) || (WEXITSTATUS(status) != 0)) {
+		error("%s: failed to remove %s / status:%u response:%s",
+			  __func__, cleanup_gekkofs_argv[2], status, cleanup_resp_msg);
+		free_command_argv(cleanup_gekkofs_argv);
+		xfree(cleanup_resp_msg);
+		return SLURM_ERROR;
+	}
+	free_command_argv(cleanup_gekkofs_argv);
+	if (cleanup_resp_msg == NULL) {
+		info("%s: rm returned no information", __func__);
+	} else {
+		debug3("%s: rm returned:%s.", __func__, cleanup_resp_msg);
+	}
+	xfree(cleanup_resp_msg);
+
+	return SLURM_SUCCESS;
+}
+
+// NEXTGenIO
+static int _fini_gekkofs_clean_tmp_filesystem_mountpoint_path(kill_job_msg_t *req)
+{
+	int status = SLURM_ERROR;
+	char **cleanup_gekkofs_argv;
+	char *cleanup_resp_msg, *gkfs_mount_path = NULL;
+
+	cleanup_gekkofs_argv = xmalloc(sizeof(char *) * 10);
+
+	cleanup_gekkofs_argv[0] = xstrdup("rm");
+	cleanup_gekkofs_argv[1] = xstrdup("-rf");
+	gkfs_mount_path = xstrdup(req->filesystem_mountpoint);
+	xstrcat(gkfs_mount_path, "/gkfs_mnt");
+	cleanup_gekkofs_argv[2] = xstrdup(gkfs_mount_path);
+	cleanup_gekkofs_argv[3] = NULL;
+
+	debug3("%s: I will run:", __func__);
+	debug3("   %2d : %s", 0, cleanup_gekkofs_argv[0]);
+	debug3("   %2d : %s", 1, cleanup_gekkofs_argv[1]);
+	debug3("   %2d : %s", 2, cleanup_gekkofs_argv[2]);
+	debug3("   %2d : %s", 3, cleanup_gekkofs_argv[3]);
+	cleanup_resp_msg = run_command("cleanup_gekkofs", "/usr/bin/rm", cleanup_gekkofs_argv, 10000, &status);
+	xfree(gkfs_mount_path);
+	if (!WIFEXITED(status) || (WEXITSTATUS(status) != 0)) {
+		error("%s: failed to remove %s / status:%u response:%s",
+			  __func__, cleanup_gekkofs_argv[2], status, cleanup_resp_msg);
+		free_command_argv(cleanup_gekkofs_argv);
+		xfree(cleanup_resp_msg);
+		return SLURM_ERROR;
+	}
+	free_command_argv(cleanup_gekkofs_argv);
+	if (cleanup_resp_msg == NULL) {
+		info("%s: rm returned no information", __func__);
+	} else {
+		debug3("%s: rm returned:%s.", __func__, cleanup_resp_msg);
+	}
+	xfree(cleanup_resp_msg);
+
+	return SLURM_SUCCESS;
+}
+
+// NEXTGenIO
+static int _fini_gekkofs_clean_tmp_filesystem_device_path(char* filesystem_device, struct passwd pwd)
+{
+	int status = SLURM_ERROR;
+	char **cleanup_gekkofs_argv;
+	char *cleanup_resp_msg, *tmp_path = NULL;
+
+	cleanup_gekkofs_argv = xmalloc(sizeof(char *) * 10);
+
+	cleanup_gekkofs_argv[0] = xstrdup("rm");
+	cleanup_gekkofs_argv[1] = xstrdup("-rf");
+	tmp_path = xstrdup(filesystem_device);
+	xstrcat(tmp_path, "/gkfs_");
+	xstrcat(tmp_path, pwd.pw_name);
+	cleanup_gekkofs_argv[2] = xstrdup(tmp_path);
+	cleanup_gekkofs_argv[3] = NULL;
+
+	debug3("%s: I will run:", __func__);
+	debug3("   %2d : %s", 0, cleanup_gekkofs_argv[0]);
+	debug3("   %2d : %s", 1, cleanup_gekkofs_argv[1]);
+	debug3("   %2d : %s", 2, cleanup_gekkofs_argv[2]);
+	debug3("   %2d : %s", 3, cleanup_gekkofs_argv[3]);
+	cleanup_resp_msg = run_command("cleanup_gekkofs", "/usr/bin/rm", cleanup_gekkofs_argv, 10000, &status);
+	xfree(tmp_path);
+	if (!WIFEXITED(status) || (WEXITSTATUS(status) != 0)) {
+		error("%s: failed to remove %s / status:%u response:%s",
+			  __func__, cleanup_gekkofs_argv[2], status, cleanup_resp_msg);
+		free_command_argv(cleanup_gekkofs_argv);
+		xfree(cleanup_resp_msg);
+		return SLURM_ERROR;
+	}
+	free_command_argv(cleanup_gekkofs_argv);
+	if (cleanup_resp_msg == NULL) {
+		info("%s: rm returned no information", __func__);
+	} else {
+		debug3("%s: rm returned:%s.", __func__, cleanup_resp_msg);
+	}
+	xfree(cleanup_resp_msg);
+
+	return SLURM_SUCCESS;
+}
+
+
+// NEXTGenIO
+static int _fini_gekkofs(kill_job_msg_t *req, uid_t uid)
+{
+	int status = SLURM_ERROR; //, gekkofs_node = -1, alternative_gekkofs_node = -1;
+	struct passwd pwd, *pwd_ptr = NULL;
+	char pwd_buf[PW_BUF_SIZE];
+	char *p_strrchr, *alternative_filesystem_device = NULL;
+
+	// Check that the node has fsdax mounted namespaces
+	status = _check_fsdax_namespaces();
+	if ( status != SLURM_SUCCESS )
+		return status;
+
+	if (slurm_getpwuid_r(uid, &pwd, pwd_buf, PW_BUF_SIZE, &pwd_ptr)
+		|| (pwd_ptr == NULL)) {
+		error("%s: getpwuid_r(%u):%m", __func__, uid);
+		return -1;
+	}
+	debug3("%s: User's home directory %s", __func__, pwd.pw_dir);
+
+	debug3("%s: complete node list:%s.", __func__, req->nodes);
+
+	alternative_filesystem_device = xstrdup(req->filesystem_device);
+//	int alternative_filesystem_device_length = strlen(alternative_filesystem_device);
+	p_strrchr = xstrrchr(alternative_filesystem_device, '0');
+	if ( p_strrchr ) {
+		*xstrrchr(alternative_filesystem_device, '0') = '1';
+//		alternative_filesystem_device[p_strrchr-alternative_filesystem_device+1] = '1';
+//		alternative_gekkofs_node = 1;
+//		gekkofs_node = 0;
+	} else {
+		p_strrchr = xstrrchr(alternative_filesystem_device, '1');
+		if ( p_strrchr ) {
+			*xstrrchr(alternative_filesystem_device, '1') = '0';
+//			alternative_filesystem_device[p_strrchr-alternative_filesystem_device+1] = '0';
+//			alternative_gekkofs_node = 0;
+//			gekkofs_node = 1;
+		} else {
+			error("%s: Unknown format of filesystem-device (%s)", __func__, req->filesystem_device);
+			xfree(alternative_filesystem_device);
+			return -1;
+		}
+	}
+	debug3("%s: provided filesystem-device:%s, alternative filesystem-device:%s.",
+			__func__, req->filesystem_device, alternative_filesystem_device);
+
+	// Kill the GekkoFS process
+	if ( cpid_nextgenio_0 == 0 ) {
+		debug2("%s: GekkoFS_0 PID is 0.", __func__);
+	}
+	if ( cpid_nextgenio_1 == 0 ) {
+		debug2("%s: GekkoFS_1 PID is 0.", __func__);
+	}
+
+	if ( cpid_nextgenio_0 != 0 ) {
+		debug2("%s: Killing GekoFS (0) with PID:%d.", __func__, cpid_nextgenio_0);
+		kill(cpid_nextgenio_0, SIGTERM);
+		usleep(1000);
+		kill(cpid_nextgenio_0, SIGKILL);
+		usleep(1000);
+		waitpid_timeout("gekkofs", cpid_nextgenio_0, &status, 10000);
+		cpid_nextgenio_0 = 0;
+	}
+	if ( cpid_nextgenio_1 != 0 ) {
+		debug2("%s: Killing GekoFS (1) with PID:%d.", __func__, cpid_nextgenio_1);
+		kill(cpid_nextgenio_1, SIGTERM);
+		usleep(1000);
+		kill(cpid_nextgenio_1, SIGKILL);
+		usleep(1000);
+		waitpid_timeout("gekkofs", cpid_nextgenio_1, &status, 10000);
+		cpid_nextgenio_1 = 0;
+	}
+
+	// Cleanup TMP_PATH (run as slurmd user)
+	// TMP_PATHs are:
+	//   TMP_PATH="/mnt/pmem_fsdax0/gkfs${USER}x"  / filesystem-device + "/gkfs_${USER}" + "/gkfs_root"
+	//   TMP_PATH2="/mnt/pmem_fsdax1/gkfs${USER}x" / filesystem-device + "/gkfs_${USER}" + "/gkfs_root"
+	status = _fini_gekkofs_clean_tmp_filesystem_device_path(req->filesystem_device, pwd);
+	if ( status != SLURM_SUCCESS ) {
+		xfree(alternative_filesystem_device);
+		return status;
+	}
+	status = _fini_gekkofs_clean_tmp_filesystem_device_path(alternative_filesystem_device, pwd);
+	xfree(alternative_filesystem_device);
+	if ( status != SLURM_SUCCESS )
+		return status;
+
+	// Cleanup mountpoint PATH
+	status = _fini_gekkofs_clean_tmp_filesystem_mountpoint_path(req);
+	if ( status != SLURM_SUCCESS )
+		return status;
+
+	// Cleanup TMP_DAEMON
+	status = _fini_gekkofs_clean_filesystem_home_gkfs_hosts(req, pwd);
+	if ( status != SLURM_SUCCESS )
+		return status;
+
+	// Cleanup TMP_DAEMON root
+	status = _fini_gekkofs_clean_filesystem_home_gkfs_client_log(req, pwd);
+	if ( status != SLURM_SUCCESS )
+		return status;
+
+	// Cleanup /tmp/gkfs_preload.log
+	status = _fini_gekkofs_clean_filesystem_tmp_gkfs_preload(req, pwd);
+	if ( status != SLURM_SUCCESS )
+		return status;
+
+	// Cleanup TMP_DAEMON user
+	status = _fini_gekkofs_clean_filesystem_home_gkfs_server_log(req, pwd);
+	if ( status != SLURM_SUCCESS )
+		return status;
+
+	// Cleanup TMP_DAEMON
+//	status = _fini_gekkofs_clean_shared_file(req, pwd);
+//	if ( status != SLURM_SUCCESS )
+//		return status;
+
+	return SLURM_SUCCESS;
+}
+
+static int _fini_filesystem(kill_job_msg_t *req)
+{
+	int status = SLURM_ERROR, i = 0;
+
+	if ( filesystem_status == 0 ) {
+		debug("%s: Filesystems (job:%d) have already been terminated. Returning.", __func__, req->job_id);
+		return SLURM_SUCCESS;
+	}
+	if ( filesystem_status == 1 ) {
+		debug("%s: Filesystems (job:%d) are being started by another thread. Let's wait before we tear them down.", __func__, req->job_id);
+		for ( i = 0 ; i < 10 ; i++ ) {
+			debug("%s: (%d) Filesystems (job:%d) are being started by another thread. Let's wait before we tear them down.", __func__, i, req->job_id);
+			sleep(1);
+			if ( filesystem_status == 2 )
+				i = 10;
+		}
+	}
+	// We should never ever see this:
+	if ( filesystem_status == 1 ) {
+		error("%s: Filesystems (job:%d) are being started by another thread. Something is wrong. Returning.", __func__, req->job_id);
+		return SLURM_ERROR;
+	}
+	filesystem_status = 0;
+
+	debug2("%s: Let's teardown a(n) %s filesystem (dev:%s, mount:%s) for job:%d",
+			__func__, req->filesystem_type, req->filesystem_device, req->filesystem_mountpoint, req->job_id);
+
+	if (xstrcmp(req->filesystem_mountpoint, "test_fail_filesystem") == 0) {
+		error("%s: Problem running mkfs command. (%s)", __func__, req->filesystem_mountpoint);
+		return ESLURM_FILESYSTEM_STOP_FAIL;
+	}
+
+	if ((xstrcmp(req->filesystem_type, "ext3") == 0) ||
+		(xstrcmp(req->filesystem_type, "ext4") == 0) ||
+		(xstrcmp(req->filesystem_type, "xfs")  == 0)) {
+
+		debug2("%s: Not implemented yet",
+				__func__);
+/*
+		status = _start_fsdax(filesystem_size, filesystem_mountpoint);
+		if ( status != SLURM_SUCCESS )
+			return ESLURM_FILESYSTEM_START_FAIL;
+
+		status = _make_fsdax(filesystem_mountpoint, filesystem_type);
+		if ( status != SLURM_SUCCESS )
+			return ESLURM_FILESYSTEM_START_FAIL;
+
+		status = _mount_fsdax(filesystem_mountpoint);
+		if ( status != SLURM_SUCCESS )
+			return ESLURM_FILESYSTEM_START_FAIL;
+
+		if ( status != SLURM_SUCCESS ) {
+			error("Problem running mkfs command. ");
+			return ESLURM_FILESYSTEM_START_FAIL;
+		}
+*/
+
+	} else if (xstrcmp(req->filesystem_type, "echofs-dax") == 0) {
+		debug2("%s: Not implemented yet",
+				__func__);
+
+
+
+	} else if (xstrcmp(req->filesystem_type, "echofs-devdax") == 0) {
+		debug2("%s: Not implemented yet",
+				__func__);
+
+
+
+	} else if (xstrcmp(req->filesystem_type, "gekkofs") == 0) {
+		status = _fini_gekkofs(req, req->job_uid);
+		if ( status != SLURM_SUCCESS )
+			return ESLURM_FILESYSTEM_STOP_FAIL;
+
+	} else if (xstrcmp(req->filesystem_type, "dataclay") == 0) {
+		debug2("%s: Not implemented yet",
+				__func__);
+
+	} else {
+		error("%s: Filesystem type (%s) is unknown.", __func__, req->filesystem_type);
+
+		return ESLURM_FILESYSTEM_UNKOWN_TYPE;
+	}
+
+	return SLURM_SUCCESS;
+}
+
+// NEXTGenIO
+static int _fini_service(char *service_type)
+{
+	int status = SLURM_ERROR;
+
+	if ( service_started == 0 ) {
+		debug("%s: Services have already been stopped. Returning.", __func__);
+		return SLURM_SUCCESS;
+	}
+	service_started = 0;
+
+	debug2("%s: Let's stop service %s", __func__, service_type);
+
+	status = _service_stop_service(service_type);
+	if ( status != SLURM_SUCCESS )
+		return ESLURM_SERVICE_STOP_FAIL;
+	sleep(1); // ToDo: Remove
+
+	status = _service_check_service(service_type, false);
+	if ( status != SLURM_SUCCESS )
+		return ESLURM_SERVICE_STOP_FAIL;
+
+	return SLURM_SUCCESS;
+}
+
+// NEXTGenIO
+static int _gekkofs_taskset_daemon(uint32_t job_id, struct passwd pwd, int node)
+{
+	int status = SLURM_ERROR;
+	char *resp_msg;
+	char *gkfs_pid = NULL;
+	char **gekkofs_argv;
+	char buf[20];
+
+	if ( node == 0)
+		snprintf(buf, sizeof(buf), "%u", cpid_nextgenio_0);
+	else if ( node == 1 )
+		snprintf(buf, sizeof(buf), "%u", cpid_nextgenio_1);
+	else {
+		error("%s: Invalid node id (%d)", __func__, node);
+		return SLURM_ERROR;
+	}
+	xstrcat(gkfs_pid, buf);
+
+	//taskset --pid --cpu-list 0-23 XXXX
+	gekkofs_argv = xmalloc(sizeof(char *) * 10);
+
+	gekkofs_argv[0] = xstrdup("/usr/bin/taskset");
+	gekkofs_argv[1] = xstrdup("--pid");
+	gekkofs_argv[2] = xstrdup("--cpu-list");
+	if ( node == 0 )
+		gekkofs_argv[3] = xstrdup("0-23");
+	else if ( node ==1 )
+		gekkofs_argv[3] = xstrdup("24-47");
+	gekkofs_argv[4] = xstrdup(gkfs_pid);
+	gekkofs_argv[5] = NULL;
+
+	debug3("%s: I will run:", __func__);
+	debug3("   %2d : %s", 0, gekkofs_argv[0]);
+	debug3("   %2d : %s", 1, gekkofs_argv[1]);
+	debug3("   %2d : %s", 2, gekkofs_argv[2]);
+	debug3("   %2d : %s", 3, gekkofs_argv[3]);
+	debug3("   %2d : %s", 4, gekkofs_argv[4]);
+	debug3("   %2d : %s", 5, gekkofs_argv[5]);
+
+	resp_msg = _filesystems_run_one_script("taskset_gekkofs", "/usr/bin/taskset",
+			gekkofs_argv, 10000, &status, job_id, pwd, "", node);
+	free_command_argv(gekkofs_argv);
+	xfree(gkfs_pid);
+	if (!WIFEXITED(status) || (WEXITSTATUS(status) != 0)) {
+		error("%s: failed to taskset GekkoFS status:%u response:%s",
+			  __func__, status, resp_msg);
+		xfree(resp_msg);
+		return SLURM_ERROR;
+	}
+	if (resp_msg == NULL) {
+		info("%s: taskset returned no information", __func__);
+	} else {
+		debug3("%s: taskset returned:%s.", __func__, resp_msg);
+	}
+
+	xfree(resp_msg);
+
+	return SLURM_SUCCESS;
+}
+
+// NEXTGenIO
+static int _gekkofs_start_daemon(char* filesystem_mountpoint,
+		char* filesystem_device, uint32_t job_id,
+		struct passwd pwd, char *nodelist, int node)
+{
+	int status = SLURM_ERROR;
+	char *resp_msg;
+	char *mountdir = NULL, *rootdir = NULL;
+	char **gekkofs_argv;
+//	char buf[100];
+
+	//CMD="${GKFS_DAEMON} --mountdir=${GKFS_MNT:?} --rootdir=${GKFS_ROOT1:?} -l ib0:5000"
+	//CMD="${GKFS_DAEMON} --mountdir=${GKFS_MNT:?} --rootdir=${GKFS_ROOT2:?} -l ib1:5000"
+	gekkofs_argv = xmalloc(sizeof(char *) * 14);
+
+	mountdir = xstrdup("--mountdir=");
+	xstrcat(mountdir, filesystem_mountpoint);
+	xstrcat(mountdir, "/gkfs_mnt");
+
+	rootdir = xstrdup("--rootdir=");
+	xstrcat(rootdir, filesystem_device);
+	xstrcat(rootdir, "/gkfs_");
+	xstrcat(rootdir, pwd.pw_name);
+	xstrcat(rootdir, "/gkfs_root");
+
+/*	sharedfile = xstrdup(pwd.pw_dir);
+	xstrcat(sharedfile, "/shkey-");
+	snprintf(buf, sizeof(buf), "%u", job_id);
+	xstrcat(sharedfile, buf); */
+
+	gekkofs_argv[0] = xstrdup("/home/nx01/shared/GekkoFS-BSC/0.6slurm/bin/gkfs_daemon");
+	gekkofs_argv[1] = xstrdup(mountdir);
+	gekkofs_argv[2] = xstrdup(rootdir);
+	gekkofs_argv[3] = xstrdup("-l");
+	if ( node == 0 )
+		gekkofs_argv[4] = xstrdup("ib0:5000");
+	else if ( node == 1 )
+		gekkofs_argv[4] = xstrdup("ib1:5000");
+	gekkofs_argv[5] = NULL;
+
+	debug3("%s: I will run:", __func__);
+	debug3("   %2d : %s", 0, gekkofs_argv[0]);
+	debug3("   %2d : %s", 1, gekkofs_argv[1]);
+	debug3("   %2d : %s", 2, gekkofs_argv[2]);
+	debug3("   %2d : %s", 3, gekkofs_argv[3]);
+	debug3("   %2d : %s", 4, gekkofs_argv[4]);
+	debug3("   %2d : %s", 5, gekkofs_argv[5]);
+
+	resp_msg = _filesystems_run_one_script("start_gekkofs", "/home/nx01/shared/GekkoFS-BSC/0.6slurm/bin/gkfs_daemon",
+			gekkofs_argv, 0, &status, job_id, pwd, filesystem_mountpoint, node);
+	free_command_argv(gekkofs_argv);
+	if (!WIFEXITED(status) || (WEXITSTATUS(status) != 0)) {
+		error("%s: failed to start GekkoFS status:%u response:%s",
+			  __func__, status, resp_msg);
+		xfree(resp_msg);
+		xfree(mountdir);
+		xfree(rootdir);
+		return SLURM_ERROR;
+	}
+	if (resp_msg == NULL) {
+		info("%s: gkfs_daemon returned no information", __func__);
+	} else {
+		debug3("%s: gkfs_daemon returned:%s.", __func__, resp_msg);
+	}
+
+	xfree(resp_msg);
+	xfree(mountdir);
+	xfree(rootdir);
+
+	return SLURM_SUCCESS;
+}
+
+// NEXTGenIO
+// Run as slurmd user
+static int _gekkofs_clean_chown_filesystem_mountpoint_dir(char* filesystem_mountpoint, struct passwd pwd, char *nodelist, uint32_t job_id)
+{
+	int status = SLURM_ERROR;
+	char **cleanup_gekkofs_argv;
+	char *cleanup_resp_msg, *gkfs_mount_path = NULL;
+
+	cleanup_gekkofs_argv = xmalloc(sizeof(char *) * 10);
+
+	cleanup_gekkofs_argv[0] = xstrdup("chown");
+	cleanup_gekkofs_argv[1] = xstrdup("-R");
+	cleanup_gekkofs_argv[2] = xstrdup(pwd.pw_name);
+	gkfs_mount_path = xstrdup(filesystem_mountpoint);
+	xstrcat(gkfs_mount_path, "/gkfs_mnt");
+	cleanup_gekkofs_argv[3] = xstrdup(gkfs_mount_path);
+	cleanup_gekkofs_argv[4] = NULL;
+
+	debug3("%s: I will run:", __func__);
+	debug3("   %2d : %s", 0, cleanup_gekkofs_argv[0]);
+	debug3("   %2d : %s", 1, cleanup_gekkofs_argv[1]);
+	debug3("   %2d : %s", 2, cleanup_gekkofs_argv[2]);
+	debug3("   %2d : %s", 3, cleanup_gekkofs_argv[3]);
+	debug3("   %2d : %s", 4, cleanup_gekkofs_argv[4]);
+	cleanup_resp_msg = _filesystems_run_one_script("chown_gekkofs_mountpoint", "/usr/bin/chown", cleanup_gekkofs_argv, 10000, &status, job_id, pwd, "", -1);
+	xfree(gkfs_mount_path);
+	if (!WIFEXITED(status) || (WEXITSTATUS(status) != 0)) {
+		error("%s: failed to create directory %s / status:%u response:%s",
+			  __func__, cleanup_gekkofs_argv[2], status, cleanup_resp_msg);
+		free_command_argv(cleanup_gekkofs_argv);
+		xfree(cleanup_resp_msg);
+		return SLURM_ERROR;
+	}
+	free_command_argv(cleanup_gekkofs_argv);
+	if (cleanup_resp_msg == NULL) {
+		info("%s: chown returned no information", __func__);
+	} else {
+		debug3("%s: chown returned:%s.", __func__, cleanup_resp_msg);
+	}
+	xfree(cleanup_resp_msg);
+
+	return SLURM_SUCCESS;
+}
+
+// NEXTGenIO
+// Run as slurmd user
+static int _gekkofs_clean_make_filesystem_mountpoint_dir(char* filesystem_mountpoint, struct passwd pwd, char *nodelist, uint32_t job_id)
+{
+	int status = SLURM_ERROR;
+	char **cleanup_gekkofs_argv;
+	char *cleanup_resp_msg, *gkfs_mount_path = NULL;
+
+	cleanup_gekkofs_argv = xmalloc(sizeof(char *) * 10);
+
+	cleanup_gekkofs_argv[0] = xstrdup("mkdir");
+	cleanup_gekkofs_argv[1] = xstrdup("-p");
+	gkfs_mount_path = xstrdup(filesystem_mountpoint);
+	xstrcat(gkfs_mount_path, "/gkfs_mnt");
+	cleanup_gekkofs_argv[2] = xstrdup(gkfs_mount_path);
+	cleanup_gekkofs_argv[3] = NULL;
+
+	debug3("%s: I will run:", __func__);
+	debug3("   %2d : %s", 0, cleanup_gekkofs_argv[0]);
+	debug3("   %2d : %s", 1, cleanup_gekkofs_argv[1]);
+	debug3("   %2d : %s", 2, cleanup_gekkofs_argv[2]);
+	debug3("   %2d : %s", 3, cleanup_gekkofs_argv[3]);
+	cleanup_resp_msg = _filesystems_run_one_script("mkdir_gekkofs_mountpoint", "/usr/bin/mkdir", cleanup_gekkofs_argv, 10000, &status, job_id, pwd, "", -1);
+	xfree(gkfs_mount_path);
+	if (!WIFEXITED(status) || (WEXITSTATUS(status) != 0)) {
+		error("%s: failed to create directory %s / status:%u response:%s",
+			  __func__, cleanup_gekkofs_argv[2], status, cleanup_resp_msg);
+		free_command_argv(cleanup_gekkofs_argv);
+		xfree(cleanup_resp_msg);
+		return SLURM_ERROR;
+	}
+	free_command_argv(cleanup_gekkofs_argv);
+	if (cleanup_resp_msg == NULL) {
+		info("%s: mkdir returned no information", __func__);
+	} else {
+		debug3("%s: mkdir returned:%s.", __func__, cleanup_resp_msg);
+	}
+	xfree(cleanup_resp_msg);
+
+	return SLURM_SUCCESS;
+}
+
+// NEXTGenIO
+// Run as slurmd user
+static int _gekkofs_clean_chown_filesystem_device_dir(char* filesystem_device, struct passwd pwd, char *nodelist, uint32_t job_id)
+{
+	int status = SLURM_ERROR;
+	char **cleanup_gekkofs_argv;
+	char *cleanup_resp_msg, *gkfs_root_path = NULL;
+
+	cleanup_gekkofs_argv = xmalloc(sizeof(char *) * 10);
+
+	cleanup_gekkofs_argv[0] = xstrdup("chown");
+	cleanup_gekkofs_argv[1] = xstrdup("-R");
+	cleanup_gekkofs_argv[2] = xstrdup(pwd.pw_name);
+	gkfs_root_path = xstrdup(filesystem_device);
+	xstrcat(gkfs_root_path, "/gkfs_");
+	xstrcat(gkfs_root_path, pwd.pw_name);
+	xstrcat(gkfs_root_path, "/gkfs_root");
+	cleanup_gekkofs_argv[3] = xstrdup(gkfs_root_path);
+	cleanup_gekkofs_argv[4] = NULL;
+
+	debug3("%s: I will run:", __func__);
+	debug3("   %2d : %s", 0, cleanup_gekkofs_argv[0]);
+	debug3("   %2d : %s", 1, cleanup_gekkofs_argv[1]);
+	debug3("   %2d : %s", 2, cleanup_gekkofs_argv[2]);
+	debug3("   %2d : %s", 3, cleanup_gekkofs_argv[3]);
+	debug3("   %2d : %s", 4, cleanup_gekkofs_argv[4]);
+	cleanup_resp_msg = _filesystems_run_one_script("chown_gekkofs_device", "/usr/bin/chown", cleanup_gekkofs_argv, 10000, &status, job_id, pwd, "", -1);
+	xfree(gkfs_root_path);
+	if (!WIFEXITED(status) || (WEXITSTATUS(status) != 0)) {
+		error("%s: failed to create directory %s / status:%u response:%s",
+			  __func__, cleanup_gekkofs_argv[2], status, cleanup_resp_msg);
+		free_command_argv(cleanup_gekkofs_argv);
+		xfree(cleanup_resp_msg);
+		return SLURM_ERROR;
+	}
+	free_command_argv(cleanup_gekkofs_argv);
+	if (cleanup_resp_msg == NULL) {
+		info("%s: chown returned no information", __func__);
+	} else {
+		debug3("%s: chown returned:%s.", __func__, cleanup_resp_msg);
+	}
+	xfree(cleanup_resp_msg);
+
+	return SLURM_SUCCESS;
+}
+
+// NEXTGenIO
+// Run as slurmd user
+static int _gekkofs_clean_make_filesystem_device_dir(char* filesystem_device, struct passwd pwd, char *nodelist, uint32_t job_id)
+{
+	int status = SLURM_ERROR;
+	char **cleanup_gekkofs_argv;
+	char *cleanup_resp_msg, *gkfs_root_path = NULL;
+
+	cleanup_gekkofs_argv = xmalloc(sizeof(char *) * 10);
+
+	cleanup_gekkofs_argv[0] = xstrdup("mkdir");
+	cleanup_gekkofs_argv[1] = xstrdup("-p");
+	gkfs_root_path = xstrdup(filesystem_device);
+	xstrcat(gkfs_root_path, "/gkfs_");
+	xstrcat(gkfs_root_path, pwd.pw_name);
+	xstrcat(gkfs_root_path, "/gkfs_root");
+	cleanup_gekkofs_argv[2] = xstrdup(gkfs_root_path);
+	cleanup_gekkofs_argv[3] = NULL;
+
+	debug3("%s: I will run:", __func__);
+	debug3("   %2d : %s", 0, cleanup_gekkofs_argv[0]);
+	debug3("   %2d : %s", 1, cleanup_gekkofs_argv[1]);
+	debug3("   %2d : %s", 2, cleanup_gekkofs_argv[2]);
+	debug3("   %2d : %s", 3, cleanup_gekkofs_argv[3]);
+	cleanup_resp_msg = _filesystems_run_one_script("mkdir_gekkofs_device", "/usr/bin/mkdir", cleanup_gekkofs_argv, 10000, &status, job_id, pwd, "", -1);
+	xfree(gkfs_root_path);
+	if (!WIFEXITED(status) || (WEXITSTATUS(status) != 0)) {
+		error("%s: failed to create directory %s / status:%u response:%s",
+			  __func__, cleanup_gekkofs_argv[2], status, cleanup_resp_msg);
+		free_command_argv(cleanup_gekkofs_argv);
+		xfree(cleanup_resp_msg);
+		return SLURM_ERROR;
+	}
+	free_command_argv(cleanup_gekkofs_argv);
+	if (cleanup_resp_msg == NULL) {
+		info("%s: mkdir returned no information", __func__);
+	} else {
+		debug3("%s: mkdir returned:%s.", __func__, cleanup_resp_msg);
+	}
+	xfree(cleanup_resp_msg);
+
+	return SLURM_SUCCESS;
+}
+
+// NEXTGenIO
+// Run as slurmd user
+static int _gekkofs_clean_chown_filesystem_home_dir(uint32_t job_id, struct passwd pwd)
+{
+	int status = SLURM_ERROR;
+	char **cleanup_gekkofs_argv;
+	char *cleanup_resp_msg, *gkfs_root_path = NULL;
+	char buf[100];
+
+	cleanup_gekkofs_argv = xmalloc(sizeof(char *) * 10);
+
+	cleanup_gekkofs_argv[0] = xstrdup("chown");
+	cleanup_gekkofs_argv[1] = xstrdup("-R");
+	cleanup_gekkofs_argv[2] = xstrdup(pwd.pw_name);
+
+	gkfs_root_path = xstrdup(pwd.pw_dir);
+	xstrcat(gkfs_root_path, "/");
+	snprintf(buf, sizeof(buf), "%u", job_id);
+	xstrcat(gkfs_root_path, buf);
+	xstrcat(gkfs_root_path, "_GEKKOFS/");
+	cleanup_gekkofs_argv[3] = xstrdup(gkfs_root_path);
+	cleanup_gekkofs_argv[4] = NULL;
+
+	debug3("%s: I will run:", __func__);
+	debug3("   %2d : %s", 0, cleanup_gekkofs_argv[0]);
+	debug3("   %2d : %s", 1, cleanup_gekkofs_argv[1]);
+	debug3("   %2d : %s", 2, cleanup_gekkofs_argv[2]);
+	debug3("   %2d : %s", 3, cleanup_gekkofs_argv[3]);
+	debug3("   %2d : %s", 4, cleanup_gekkofs_argv[4]);
+	cleanup_resp_msg = _filesystems_run_one_script("chown_gekkofs_device", "/usr/bin/chown", cleanup_gekkofs_argv, 10000, &status, job_id, pwd, "", -1);
+	xfree(gkfs_root_path);
+	if (!WIFEXITED(status) || (WEXITSTATUS(status) != 0)) {
+		error("%s: failed to create directory %s / status:%u response:%s",
+			  __func__, cleanup_gekkofs_argv[2], status, cleanup_resp_msg);
+		free_command_argv(cleanup_gekkofs_argv);
+		xfree(cleanup_resp_msg);
+		return SLURM_ERROR;
+	}
+	free_command_argv(cleanup_gekkofs_argv);
+	if (cleanup_resp_msg == NULL) {
+		info("%s: chown returned no information", __func__);
+	} else {
+		debug3("%s: chown returned:%s.", __func__, cleanup_resp_msg);
+	}
+	xfree(cleanup_resp_msg);
+
+	return SLURM_SUCCESS;
+}
+
+
+// NEXTGenIO
+// Run as slurmd user
+static int _gekkofs_clean_make_filesystem_home_dir(uint32_t job_id, struct passwd pwd)
+{
+	int status = SLURM_ERROR;
+	char **cleanup_gekkofs_argv;
+	char *cleanup_resp_msg, *gkfs_mount_path = NULL;
+	char buf[100];
+
+	cleanup_gekkofs_argv = xmalloc(sizeof(char *) * 10);
+
+	cleanup_gekkofs_argv[0] = xstrdup("mkdir");
+	cleanup_gekkofs_argv[1] = xstrdup("-p");
+
+	gkfs_mount_path = xstrdup(pwd.pw_dir);
+	xstrcat(gkfs_mount_path, "/");
+	snprintf(buf, sizeof(buf), "%u", job_id);
+	xstrcat(gkfs_mount_path, buf);
+	xstrcat(gkfs_mount_path, "_GEKKOFS/");
+
+	cleanup_gekkofs_argv[2] = xstrdup(gkfs_mount_path);
+	cleanup_gekkofs_argv[3] = NULL;
+
+	debug3("%s: I will run:", __func__);
+	debug3("   %2d : %s", 0, cleanup_gekkofs_argv[0]);
+	debug3("   %2d : %s", 1, cleanup_gekkofs_argv[1]);
+	debug3("   %2d : %s", 2, cleanup_gekkofs_argv[2]);
+	debug3("   %2d : %s", 3, cleanup_gekkofs_argv[3]);
+	cleanup_resp_msg = _filesystems_run_one_script("mkdir_gekkofs_home", "/usr/bin/mkdir", cleanup_gekkofs_argv, 10000, &status, job_id, pwd, "", -1);
+	xfree(gkfs_mount_path);
+	if (!WIFEXITED(status) || (WEXITSTATUS(status) != 0)) {
+		error("%s: failed to create directory %s / status:%u response:%s",
+			  __func__, cleanup_gekkofs_argv[2], status, cleanup_resp_msg);
+		free_command_argv(cleanup_gekkofs_argv);
+		xfree(cleanup_resp_msg);
+		return SLURM_ERROR;
+	}
+	free_command_argv(cleanup_gekkofs_argv);
+	if (cleanup_resp_msg == NULL) {
+		info("%s: mkdir returned no information", __func__);
+	} else {
+		debug3("%s: mkdir returned:%s.", __func__, cleanup_resp_msg);
+	}
+	xfree(cleanup_resp_msg);
+
+	return SLURM_SUCCESS;
+}
+
+// NEXTGenIO
+static int _gekkofs_clean_filesystem_home_gkfs_server_log(uint32_t job_id, struct passwd pwd)
+{
+	int status = SLURM_ERROR;
+	char **cleanup_gekkofs_argv;
+	char *cleanup_resp_msg, *gkfs_server_log_path = NULL;
+	char buf[100];
+
+	cleanup_gekkofs_argv = xmalloc(sizeof(char *) * 10);
+
+	cleanup_gekkofs_argv[0] = xstrdup("rm");
+	cleanup_gekkofs_argv[1] = xstrdup("-f");
+
+	gkfs_server_log_path = xstrdup(pwd.pw_dir);
+	xstrcat(gkfs_server_log_path, "/");
+	snprintf(buf, sizeof(buf), "%u", job_id);
+	xstrcat(gkfs_server_log_path, buf);
+	xstrcat(gkfs_server_log_path, "_GEKKOFS/");
+	xstrcat(gkfs_server_log_path, "gkfs_server.log");
+
+	cleanup_gekkofs_argv[2] = xstrdup(gkfs_server_log_path);
+	cleanup_gekkofs_argv[3] = NULL;
+
+	debug3("%s: I will run:", __func__);
+	debug3("   %2d : %s", 0, cleanup_gekkofs_argv[0]);
+	debug3("   %2d : %s", 1, cleanup_gekkofs_argv[1]);
+	debug3("   %2d : %s", 2, cleanup_gekkofs_argv[2]);
+	debug3("   %2d : %s", 3, cleanup_gekkofs_argv[3]);
+	cleanup_resp_msg = run_command("cleanup_gekkofs", "/usr/bin/rm", cleanup_gekkofs_argv, 10000, &status);
+	xfree(gkfs_server_log_path);
+	if (!WIFEXITED(status) || (WEXITSTATUS(status) != 0)) {
+		error("%s: failed to remove %s / status:%u response:%s",
+			  __func__, cleanup_gekkofs_argv[2], status, cleanup_resp_msg);
+		free_command_argv(cleanup_gekkofs_argv);
+		xfree(cleanup_resp_msg);
+		return SLURM_ERROR;
+	}
+	free_command_argv(cleanup_gekkofs_argv);
+	if (cleanup_resp_msg == NULL) {
+		info("%s: rm returned no information", __func__);
+	} else {
+		debug3("%s: rm returned:%s.", __func__, cleanup_resp_msg);
+	}
+	xfree(cleanup_resp_msg);
+
+	return SLURM_SUCCESS;
+}
+
+// NEXTGenIO
+static int _gekkofs_clean_filesystem_home_gkfs_client_log(uint32_t job_id, struct passwd pwd)
+{
+	int status = SLURM_ERROR;
+	char **cleanup_gekkofs_argv;
+	char *cleanup_resp_msg, *gkfs_client_log_path = NULL;
+	char buf[100];
+
+	cleanup_gekkofs_argv = xmalloc(sizeof(char *) * 10);
+
+	cleanup_gekkofs_argv[0] = xstrdup("rm");
+	cleanup_gekkofs_argv[1] = xstrdup("-f");
+
+	gkfs_client_log_path = xstrdup(pwd.pw_dir);
+	xstrcat(gkfs_client_log_path, "/");
+	snprintf(buf, sizeof(buf), "%u", job_id);
+	xstrcat(gkfs_client_log_path, buf);
+	xstrcat(gkfs_client_log_path, "_GEKKOFS/");
+	xstrcat(gkfs_client_log_path, "gkfs_client.log");
+
+	cleanup_gekkofs_argv[2] = xstrdup(gkfs_client_log_path);
+	cleanup_gekkofs_argv[3] = NULL;
+
+	debug3("%s: I will run:", __func__);
+	debug3("   %2d : %s", 0, cleanup_gekkofs_argv[0]);
+	debug3("   %2d : %s", 1, cleanup_gekkofs_argv[1]);
+	debug3("   %2d : %s", 2, cleanup_gekkofs_argv[2]);
+	debug3("   %2d : %s", 3, cleanup_gekkofs_argv[3]);
+	cleanup_resp_msg = run_command("cleanup_gekkofs", "/usr/bin/rm", cleanup_gekkofs_argv, 10000, &status);
+	xfree(gkfs_client_log_path);
+	if (!WIFEXITED(status) || (WEXITSTATUS(status) != 0)) {
+		error("%s: failed to remove %s / status:%u response:%s",
+			  __func__, cleanup_gekkofs_argv[2], status, cleanup_resp_msg);
+		free_command_argv(cleanup_gekkofs_argv);
+		xfree(cleanup_resp_msg);
+		return SLURM_ERROR;
+	}
+	free_command_argv(cleanup_gekkofs_argv);
+	if (cleanup_resp_msg == NULL) {
+		info("%s: rm returned no information", __func__);
+	} else {
+		debug3("%s: rm returned:%s.", __func__, cleanup_resp_msg);
+	}
+	xfree(cleanup_resp_msg);
+
+	return SLURM_SUCCESS;
+}
+
+/*
+static int _gekkofs_clean_tmp_daemon(struct passwd pwd)
+{
+	int status = SLURM_ERROR;
+	char **cleanup_gekkofs_argv;
+	char *cleanup_resp_msg, *daemon_userid = NULL;
+
+	cleanup_gekkofs_argv = xmalloc(sizeof(char *) * 10);
+
+	cleanup_gekkofs_argv[0] = xstrdup("rm");
+	cleanup_gekkofs_argv[1] = xstrdup("-f");
+	cleanup_gekkofs_argv[2] = xstrdup("/tmp/gkfs_daemon.pid");
+	cleanup_gekkofs_argv[3] = NULL;
+
+	debug3("%s: I would have run:", __func__);
+	debug3("   %2d : %s", 0, cleanup_gekkofs_argv[0]);
+	debug3("   %2d : %s", 1, cleanup_gekkofs_argv[1]);
+	debug3("   %2d : %s", 2, cleanup_gekkofs_argv[2]);
+	debug3("   %2d : %s", 3, cleanup_gekkofs_argv[3]);
+	cleanup_resp_msg = run_command("cleanup_gekkofs", "/usr/bin/rm", cleanup_gekkofs_argv, 10000, &status);
+	xfree(daemon_userid);
+	if (!WIFEXITED(status) || (WEXITSTATUS(status) != 0)) {
+		error("%s: failed to remove %s / status:%u response:%s",
+			  __func__, cleanup_gekkofs_argv[2], status, cleanup_resp_msg);
+		free_command_argv(cleanup_gekkofs_argv);
+		xfree(cleanup_resp_msg);
+		return SLURM_ERROR;
+	}
+	free_command_argv(cleanup_gekkofs_argv);
+	if (cleanup_resp_msg == NULL) {
+		info("%s: rm returned no information", __func__);
+	} else {
+		debug3("%s: rm returned:%s.", __func__, cleanup_resp_msg);
+	}
+	xfree(cleanup_resp_msg);
+
+	return SLURM_SUCCESS;
+}
+*/
+
+// NEXTGenIO
+static int _gekkofs_clean_filesystem_home_gkfs_hosts(uint32_t job_id, struct passwd pwd)
+{
+	int status = SLURM_ERROR;
+	char **cleanup_gekkofs_argv;
+	char *cleanup_resp_msg, *gkfs_hosts_path = NULL;
+	char buf[100];
+
+	cleanup_gekkofs_argv = xmalloc(sizeof(char *) * 10);
+
+	cleanup_gekkofs_argv[0] = xstrdup("rm");
+	cleanup_gekkofs_argv[1] = xstrdup("-f");
+
+	gkfs_hosts_path = xstrdup(pwd.pw_dir);
+	xstrcat(gkfs_hosts_path, "/");
+	snprintf(buf, sizeof(buf), "%u", job_id);
+	xstrcat(gkfs_hosts_path, buf);
+	xstrcat(gkfs_hosts_path, "_GEKKOFS/");
+	xstrcat(gkfs_hosts_path, "gkfs_hosts.txt");
+
+	cleanup_gekkofs_argv[2] = xstrdup(gkfs_hosts_path);
+	cleanup_gekkofs_argv[3] = NULL;
+
+	debug3("%s: I will run:", __func__);
+	debug3("   %2d : %s", 0, cleanup_gekkofs_argv[0]);
+	debug3("   %2d : %s", 1, cleanup_gekkofs_argv[1]);
+	debug3("   %2d : %s", 2, cleanup_gekkofs_argv[2]);
+	debug3("   %2d : %s", 3, cleanup_gekkofs_argv[3]);
+	cleanup_resp_msg = run_command("cleanup_gekkofs", "/usr/bin/rm", cleanup_gekkofs_argv, 10000, &status);
+	xfree(gkfs_hosts_path);
+	if (!WIFEXITED(status) || (WEXITSTATUS(status) != 0)) {
+		error("%s: failed to remove %s / status:%u response:%s",
+			  __func__, cleanup_gekkofs_argv[2], status, cleanup_resp_msg);
+		free_command_argv(cleanup_gekkofs_argv);
+		xfree(cleanup_resp_msg);
+		return SLURM_ERROR;
+	}
+	free_command_argv(cleanup_gekkofs_argv);
+	if (cleanup_resp_msg == NULL) {
+		info("%s: rm returned no information", __func__);
+	} else {
+		debug3("%s: rm returned:%s.", __func__, cleanup_resp_msg);
+	}
+	xfree(cleanup_resp_msg);
+
+	return SLURM_SUCCESS;
+}
+
+// NEXTGenIO
+// Run as slurmd user
+static int _gekkofs_clean_tmp_path(char* filesystem_device, uint32_t job_id, struct passwd pwd)
+{
+	int status = SLURM_ERROR;
+	char **cleanup_gekkofs_argv;
+	char *cleanup_resp_msg, *tmp_path = NULL;
+
+	cleanup_gekkofs_argv = xmalloc(sizeof(char *) * 10);
+
+	cleanup_gekkofs_argv[0] = xstrdup("rm");
+	cleanup_gekkofs_argv[1] = xstrdup("-rf");
+	tmp_path = xstrdup(filesystem_device);
+	xstrcat(tmp_path, "/gkfs_");
+	xstrcat(tmp_path, pwd.pw_name);
+	cleanup_gekkofs_argv[2] = xstrdup(tmp_path);
+	cleanup_gekkofs_argv[3] = NULL;
+
+	debug3("%s: I will run:", __func__);
+	debug3("   %2d : %s", 0, cleanup_gekkofs_argv[0]);
+	debug3("   %2d : %s", 1, cleanup_gekkofs_argv[1]);
+	debug3("   %2d : %s", 2, cleanup_gekkofs_argv[2]);
+	debug3("   %2d : %s", 3, cleanup_gekkofs_argv[3]);
+	cleanup_resp_msg = _filesystems_run_one_script("cleanup_gekkofs", "/usr/bin/rm", cleanup_gekkofs_argv, 10000, &status, job_id, pwd, "", -1);
+	free_command_argv(cleanup_gekkofs_argv);
+	xfree(tmp_path);
+	if (!WIFEXITED(status) || (WEXITSTATUS(status) != 0)) {
+		error("%s: failed to remove %s / status:%u response:%s",
+			  __func__, filesystem_device, status, cleanup_resp_msg);
+		xfree(cleanup_resp_msg);
+		return SLURM_ERROR;
+	}
+	if (cleanup_resp_msg == NULL) {
+		info("%s: rm returned no information", __func__);
+	} else {
+		debug3("%s: rm returned:%s.", __func__, cleanup_resp_msg);
+	}
+	xfree(cleanup_resp_msg);
+
+	return SLURM_SUCCESS;
+}
+
+// NEXTGenIO
+static int _start_gekkofs(uint32_t uid, char* complete_nodelist, uint32_t nnodes,
+		char* filesystem_device, char* filesystem_mountpoint, char* filesystem_size, uint32_t job_id)
+{
+	int status = SLURM_ERROR, i = 0, nodelist_count = 0, number_of_gekkofs_daemons = 2, gekkofs_node = -1, alternative_gekkofs_node = -1;
+	struct passwd pwd, *pwd_ptr = NULL;
+	char pwd_buf[PW_BUF_SIZE];
+	hostlist_t host_list;
+	char *this_node_name, *p_strrchr;
+	char *nodelist = NULL, *alternative_filesystem_device = NULL;
+
+	// Check that the node has fsdax mounted namespaces
+	status = _check_fsdax_namespaces();
+	if ( status != SLURM_SUCCESS )
+		return status;
+
+	if (slurm_getpwuid_r(uid, &pwd, pwd_buf, PW_BUF_SIZE, &pwd_ptr)
+		|| (pwd_ptr == NULL)) {
+		error("%s: getpwuid_r(%u):%m", __func__, uid);
+		return -1;
+	}
+	debug3("%s: User's home directory %s", __func__, pwd.pw_dir);
+
+	// No need to check about this:
+	/*
+	if (xstrncasecmp(pwd.pw_dir, filesystem_mountpoint, strlen(pwd.pw_dir)) == 0) {
+		debug3("%s: filesystem-mountpoint (%s) points to user (%u) :%s home directory",
+				__func__, filesystem_mountpoint, pwd.pw_uid, pwd.pw_name);
+	} else {
+		error("%s: filesystem-mountpoint (%s) does NOT point to user (%u) :%s home directory",
+				__func__, filesystem_mountpoint, pwd.pw_uid, pwd.pw_name);
+		return -1;
+	}
+	*/
+
+	if ( filesystem_size != NULL) {
+		if ( strlen(filesystem_size) > 0 ) {
+			number_of_gekkofs_daemons = 1;
+			gekkofs_node = atoi(filesystem_size);
+		}
+	}
+	debug3("%s: number of GekkoFS daemons:%d", __func__, number_of_gekkofs_daemons);
+
+	if ( number_of_gekkofs_daemons == 2 ) {
+		alternative_filesystem_device = xstrdup(filesystem_device);
+//		int alternative_filesystem_device_length = strlen(alternative_filesystem_device);
+		p_strrchr = xstrrchr(alternative_filesystem_device, '0');
+		if ( p_strrchr ) {
+			*xstrrchr(alternative_filesystem_device, '0') = '1';
+//			alternative_filesystem_device[p_strrchr-alternative_filesystem_device] = '1';
+			alternative_gekkofs_node = 1;
+			gekkofs_node = 0;
+		} else {
+			p_strrchr = xstrrchr(alternative_filesystem_device, '1');
+			if ( p_strrchr ) {
+				*xstrrchr(alternative_filesystem_device, '1') = '0';
+//				alternative_filesystem_device[p_strrchr-alternative_filesystem_device] = '0';
+				alternative_gekkofs_node = 0;
+				gekkofs_node = 1;
+			} else {
+				error("%s: Unknown format of filesystem-device (%s)", __func__, filesystem_device);
+				xfree(alternative_filesystem_device);
+				return -1;
+			}
+		}
+		debug3("%s: provided filesystem-device:%s, alternative filesystem-device:%s.",
+				__func__, filesystem_device, alternative_filesystem_device);
+	} else if ( number_of_gekkofs_daemons != 1 ){
+		error("%s: Illegal number of GekkoFS daemons:%d",
+				__func__, number_of_gekkofs_daemons);
+		return -1;
+	}
+	debug3("%s: Using node %d for GekkoFS daemon.", __func__, gekkofs_node);
+
+	debug3("%s: complete node list:%s.", __func__, complete_nodelist);
+	nodelist = xmalloc(nnodes * 60); // ToDo: 60 should be the maximum length of a node's hostname
+
+	i = 0;
+	if ((host_list = hostlist_create (complete_nodelist))) {
+		nodelist_count = hostlist_count(host_list);
+		while ((this_node_name = hostlist_shift (host_list))) {
+			if ( nodelist_count == (i + 1) )
+				xstrfmtcat(nodelist, "%s", this_node_name);
+			else
+				xstrfmtcat(nodelist, "%s,", this_node_name);
+
+			i++;
+			free(this_node_name);
+		}
+
+		hostlist_destroy(host_list);
+	}
+	debug3("%s: complete node list:%s.", __func__, nodelist);
+
+	// Cleanup TMP_PATH (run as slurmd user)
+	// TMP_PATHs are:
+	//   TMP_PATH="/mnt/pmem_fsdax0/gkfs${USER}x"  / filesystem-device + "/gkfs_${USER}" + "/gkfs_root"
+	//   TMP_PATH2="/mnt/pmem_fsdax1/gkfs${USER}x" / filesystem-device + "/gkfs_${USER}" + "/gkfs_root"
+	status = _gekkofs_clean_tmp_path(filesystem_device, job_id, pwd);
+	if ( status != SLURM_SUCCESS ) {
+		goto cleanup;
+	}
+	if ( number_of_gekkofs_daemons == 2 ) {
+		status = _gekkofs_clean_tmp_path(alternative_filesystem_device, job_id, pwd);
+		if ( status != SLURM_SUCCESS ) {
+			goto cleanup;
+		}
+	}
+
+	// Cleanup Client log
+	// The path is based on $HOME/JOBID_GEKKOFS/ + "/gkfs_client.log"
+	status = _gekkofs_clean_filesystem_home_gkfs_client_log(job_id, pwd);
+	if ( status != SLURM_SUCCESS ) {
+		goto cleanup;
+	}
+
+	// Cleanup Server log
+	// The path is based on $HOME/JOBID_GEKKOFS/ + "/gkfs_server.log"
+	status = _gekkofs_clean_filesystem_home_gkfs_server_log(job_id, pwd);
+	if ( status != SLURM_SUCCESS ) {
+		goto cleanup;
+	}
+
+	// Cleanup GekkoFS hosts file
+	// The path is based on $HOME/JOBID_GEKKOFS/ + "/gkfs_hosts.txt"
+	status = _gekkofs_clean_filesystem_home_gkfs_hosts(job_id, pwd);
+	if ( status != SLURM_SUCCESS ) {
+		goto cleanup;
+	}
+
+	// Cleanup mountpoint directory (run as slurmd user)
+	// Create the mountpoint dir; based on $HOME/JOBID_GEKKOFS/
+	status = _gekkofs_clean_make_filesystem_home_dir(job_id, pwd);
+	if ( status != SLURM_SUCCESS ) {
+		goto cleanup;
+	}
+
+	// Chown mountpoint directory to USER (run as slurmd user)
+	// Chown the mountpoint dir; based on $HOME/JOBID_GEKKOFS/
+	status = _gekkofs_clean_chown_filesystem_home_dir(job_id, pwd);
+	if ( status != SLURM_SUCCESS ) {
+		goto cleanup;
+	}
+
+	// Cleanup mountpoint directory (run as slurmd user)
+	// Create the mountpoint dir; based on filesystem-mountpoint + "/gkfs_mnt"
+	status = _gekkofs_clean_make_filesystem_mountpoint_dir(filesystem_mountpoint, pwd, nodelist, job_id);
+	if ( status != SLURM_SUCCESS ) {
+		goto cleanup;
+	}
+
+	// Chown mountpoint directory to USER (run as slurmd user)
+	// Chown the mountpoint dir; based on filesystem-mountpoint + "/gkfs_mnt"
+	status = _gekkofs_clean_chown_filesystem_mountpoint_dir(filesystem_mountpoint, pwd, nodelist, job_id);
+	if ( status != SLURM_SUCCESS ) {
+		goto cleanup;
+	}
+
+	// Cleanup device directory (run as slurmd user)
+	// Create the device dir; based on filesystem-device + "/gkfs_${USER}/gkfs_root"
+	//   "/mnt/pmem_fsdax0/gkfs${USER}x"  / filesystem-device + "/gkfs_${USER}" + "/gkfs_root"
+	//   "/mnt/pmem_fsdax1/gkfs${USER}x"  / filesystem-device + "/gkfs_${USER}" + "/gkfs_root"
+	status = _gekkofs_clean_make_filesystem_device_dir(filesystem_device, pwd, nodelist, job_id);
+	if ( status != SLURM_SUCCESS ) {
+		goto cleanup;
+	}
+	if ( number_of_gekkofs_daemons == 2 ) {
+		status = _gekkofs_clean_make_filesystem_device_dir(alternative_filesystem_device, pwd, nodelist, job_id);
+		if ( status != SLURM_SUCCESS ) {
+			goto cleanup;
+		}
+	}
+
+	// Chown device directory (run as slurmd user)
+	// Chown the device dir; based on filesystem-device + "/gkfs_${USER}/gkfs_root"
+	//   "/mnt/pmem_fsdax0/gkfs${USER}x"  / filesystem-device + "/gkfs_${USER}" + "/gkfs_root"
+	//   "/mnt/pmem_fsdax1/gkfs${USER}x"  / filesystem-device + "/gkfs_${USER}" + "/gkfs_root"
+	status = _gekkofs_clean_chown_filesystem_device_dir(filesystem_device, pwd, nodelist, job_id);
+	if ( status != SLURM_SUCCESS ) {
+		goto cleanup;
+	}
+	if ( number_of_gekkofs_daemons == 2 ) {
+		status = _gekkofs_clean_chown_filesystem_device_dir(alternative_filesystem_device, pwd, nodelist, job_id);
+		if ( status != SLURM_SUCCESS ) {
+			goto cleanup;
+		}
+	}
+
+	// Start GekkoFS Daemon
+	//CMD="${GKFS_DAEMON} --mountdir=${GKFS_MNT:?} --rootdir=${GKFS_ROOT1:?} -l ib0:5000"
+	//CMD="${GKFS_DAEMON} --mountdir=${GKFS_MNT:?} --rootdir=${GKFS_ROOT2:?} -l ib1:5000"
+	if ( number_of_gekkofs_daemons == 1 ) {
+		status = _gekkofs_start_daemon(filesystem_mountpoint, filesystem_device, job_id, pwd, nodelist, gekkofs_node);
+		if ( status != SLURM_SUCCESS )
+			goto cleanup;
+		sleep(1); // ToDo: REMOVE
+		status = _gekkofs_taskset_daemon(job_id, pwd, gekkofs_node);
+		if ( status != SLURM_SUCCESS ) {
+			goto cleanup;
+		}
+	} else {
+		status = _gekkofs_start_daemon(filesystem_mountpoint, filesystem_device, job_id, pwd, nodelist, gekkofs_node);
+		if ( status != SLURM_SUCCESS ) {
+			goto cleanup;
+		}
+		sleep(1); // ToDo: REMOVE
+		status = _gekkofs_taskset_daemon(job_id, pwd, gekkofs_node);
+		if ( status != SLURM_SUCCESS ) {
+			goto cleanup;
+		}
+		sleep(1); // ToDo: REMOVE
+		status = _gekkofs_start_daemon(filesystem_mountpoint, alternative_filesystem_device, job_id, pwd, nodelist, alternative_gekkofs_node);
+		if ( status != SLURM_SUCCESS ) {
+			goto cleanup;
+		}
+		status = _gekkofs_taskset_daemon(job_id, pwd, alternative_gekkofs_node);
+		if ( status != SLURM_SUCCESS ) {
+			goto cleanup;
+		}
+	}
+
+	xfree(nodelist);
+	xfree(alternative_filesystem_device);
+	return SLURM_SUCCESS;
+
+cleanup:
+	xfree(nodelist);
+	xfree(alternative_filesystem_device);
+	return status;
+
+}
+
+/* Log a command's arguments. */
+static void _log_script_argv(char **script_argv, char *resp_msg, bool print_debug)
+{
+	char *cmd_line = NULL;
+	int i;
+
+	if (!print_debug)
+		return;
+
+	for (i = 0; script_argv[i]; i++) {
+		if (i)
+			xstrcat(cmd_line, " ");
+		xstrcat(cmd_line, script_argv[i]);
+	}
+	info("%s", cmd_line);
+	if (resp_msg && resp_msg[0])
+		info("%s", resp_msg);
+	xfree(cmd_line);
+}
+
+// NEXTGenIO
+static int _create_namespaces()
+{
+	int status = 0, found_region12 = -1, found_region13 = -1;
+	char **ndctl_argv;
+	char *ndctl_resp_msg, *tok, *save_ptr = NULL;
+
+	ndctl_argv = xmalloc(sizeof(char *) * 10);
+
+	ndctl_argv[0] = xstrdup("/usr/bin/ndctl");
+	ndctl_argv[1] = xstrdup("list");
+	ndctl_argv[2] = NULL;
+
+	debug3("%s: I will run:", __func__);
+	debug3("   %2d : %s", 0, ndctl_argv[0]);
+	debug3("   %2d : %s", 1, ndctl_argv[1]);
+	debug3("   %2d : %s", 2, ndctl_argv[2]);
+	ndctl_resp_msg = run_command("ndctl_list", "/usr/bin/ndctl", ndctl_argv, 10000, &status);
+	if (!WIFEXITED(status) || (WEXITSTATUS(status) != 0)) {
+		error("%s: failed to ndctl list / status:%u response:%s",
+			  __func__, status, ndctl_resp_msg);
+		free_command_argv(ndctl_argv);
+		xfree(ndctl_resp_msg);
+		return SLURM_ERROR;
+	}
+
+	if (ndctl_resp_msg == NULL) {
+		info("%s: ipmctl returned no information", __func__);
+	} else {
+		tok = NULL;
+		_log_script_argv(ndctl_argv, ndctl_resp_msg, false);
+		tok = strtok_r(ndctl_resp_msg, "\n", &save_ptr);
+
+		while (tok) {
+			if ( !xstrcasecmp(tok, "namespace13")) {
+				found_region13 = 1;
+			} else if ( !xstrcasecmp(tok, "namespace12")) {
+				found_region12 = 1;
+			}
+
+			tok = strtok_r(NULL, "\n", &save_ptr);
+		}
+
+		debug3("%s: region12:%d, region13:%d.",
+			  __func__, found_region12, found_region13);
+	}
+	xfree(ndctl_resp_msg);
+	free_command_argv(ndctl_argv);
+
+	if ( found_region12 == -1 ) {
+		status = _create_namespace("region12");
+		if ( status != SLURM_SUCCESS ) {
+			error("%s: Problem running ndctl command.", __func__);
+			return ESLURM_NDCTL_CONFIGURE_FAIL;
+		}
+	}
+
+	if ( found_region13 == -1 ) {
+		status = _create_namespace("region13");
+		if ( status != SLURM_SUCCESS ) {
+			error("%s: Problem running ndctl command.", __func__);
+			return ESLURM_NDCTL_CONFIGURE_FAIL;
+		}
+	}
+
+	return SLURM_SUCCESS;
+}
+
+// NEXTGenIO
+static int _create_namespace(char *region)
+{
+	int status = 0;
+	char *ndctl_resp_msg, *region_command = NULL;
+	char **ndctl_argv;
+
+	// ndctl create-namespace --force --region=region12 --mode=fsdax
+	ndctl_argv = xmalloc(sizeof(char *) * 10);
+
+	ndctl_argv[0] = xstrdup("ndctl");
+	ndctl_argv[1] = xstrdup("create-namespace");
+	ndctl_argv[2] = xstrdup("--force");
+	region_command = xstrdup("--region=");
+	xstrcat(region_command, region);
+	ndctl_argv[3] = xstrdup(region_command);
+	ndctl_argv[4] = xstrdup("--mode=fsdax");
+	ndctl_argv[5] = NULL;
+
+	debug3("%s: I will run:", __func__);
+	debug3("   %2d : %s", 0, ndctl_argv[0]);
+	debug3("   %2d : %s", 1, ndctl_argv[1]);
+	debug3("   %2d : %s", 2, ndctl_argv[2]);
+	debug3("   %2d : %s", 3, ndctl_argv[3]);
+	debug3("   %2d : %s", 4, ndctl_argv[4]);
+	debug3("   %2d : %s", 5, ndctl_argv[5]);
+	ndctl_resp_msg = run_command("ndctl", NDCTL_PATH, ndctl_argv, 10000, &status);
+	xfree(region_command);
+	if (!WIFEXITED(status) || (WEXITSTATUS(status) != 0)) {
+		error("%s: failed to create namespace %s / status:%u response:%s",
+			  __func__, ndctl_argv[3], status, ndctl_resp_msg);
+		free_command_argv(ndctl_argv);
+		xfree(ndctl_resp_msg);
+		return ESLURM_NDCTL_CONFIGURE_FAIL;
+	}
+	free_command_argv(ndctl_argv);
+	if (ndctl_resp_msg == NULL) {
+		info("%s: ndctl returned no information", __func__);
+	} else {
+		debug3("%s: ndctl returned:%s.", __func__, ndctl_resp_msg);
+	}
+	xfree(ndctl_resp_msg);
+
+	return SLURM_SUCCESS;
+}
+
+// NEXTGenIO
+static int _make_fsdaxes(char* filesystem_type)
+{
+	int status = 0, found_pmem12 = -1, found_pmem13 = -1;
+	char **mount_argv;
+	char *mount_resp_msg, *tok, *save_ptr = NULL;
+
+	mount_argv = xmalloc(sizeof(char *) * 10);
+
+	mount_argv[0] = xstrdup("/usr/bin/mount");
+	mount_argv[1] = NULL;
+
+	debug3("%s: I will run:", __func__);
+	debug3("   %2d : %s", 0, mount_argv[0]);
+	debug3("   %2d : %s", 1, mount_argv[1]);
+	mount_resp_msg = run_command("ndctl_list", "/usr/bin/ndctl", mount_argv, 10000, &status);
+	if (!WIFEXITED(status) || (WEXITSTATUS(status) != 0)) {
+		error("%s: failed to mount list / status:%u response:%s",
+			  __func__, status, mount_resp_msg);
+		free_command_argv(mount_argv);
+		xfree(mount_resp_msg);
+		return SLURM_ERROR;
+	}
+
+	if (mount_resp_msg == NULL) {
+		info("%s: ipmctl returned no information", __func__);
+	} else {
+		tok = NULL;
+		_log_script_argv(mount_argv, mount_resp_msg, false);
+		tok = strtok_r(mount_resp_msg, "\n", &save_ptr);
+
+		while (tok) {
+			if ( !xstrcasecmp(tok, "pmem12")) {
+				found_pmem12 = 1;
+			} else if ( !xstrcasecmp(tok, "pmem13")) {
+				found_pmem13 = 1;
+			}
+
+			tok = strtok_r(NULL, "\n", &save_ptr);
+		}
+
+		debug3("%s: pmem12:%d, pmem13:%d.",
+			  __func__, found_pmem12, found_pmem12);
+	}
+	xfree(mount_resp_msg);
+	free_command_argv(mount_argv);
+
+	if ( found_pmem12 == -1 ) {
+		status = _make_fsdax(filesystem_type, "/dev/pmem12");
+		if ( status != SLURM_SUCCESS ) {
+			error("%s: Problem running mkfs command.", __func__);
+			return ESLURM_NDCTL_CONFIGURE_FAIL;
+		}
+	}
+
+	if ( found_pmem13 == -1 ) {
+		status = _make_fsdax(filesystem_type, "/dev/pmem13");
+		if ( status != SLURM_SUCCESS ) {
+			error("%s: Problem running mkfs command.", __func__);
+			return ESLURM_NDCTL_CONFIGURE_FAIL;
+		}
+	}
+
+	return SLURM_SUCCESS;
+}
+
+// NEXTGenIO
+static int _make_fsdax(char* filesystem_type, char* device)
+{
+	int status = 0;
+	char **mkfs_argv;
+	char *mkfs_resp_msg;
+
+	// mkfs -t FILESYTEM_TYPE /dev/fsdax MOUNTPOINT
+	mkfs_argv = xmalloc(sizeof(char *) * 10);
+
+	mkfs_argv[0] = xstrdup("/usr/sbin/mkfs");
+	mkfs_argv[1] = xstrdup("-t");
+	mkfs_argv[2] = xstrdup(filesystem_type);
+	mkfs_argv[3] = xstrdup(device);
+	mkfs_argv[4] = NULL;
+
+	debug3("%s: I will  run:", __func__);
+	debug3("   %2d : %s", 0, mkfs_argv[0]);
+	debug3("   %2d : %s", 1, mkfs_argv[1]);
+	debug3("   %2d : %s", 2, mkfs_argv[2]);
+	debug3("   %2d : %s", 3, mkfs_argv[3]);
+	mkfs_resp_msg = run_command("mkfs", "/usr/sbin/mkfs", mkfs_argv, 10000, &status);
+	free_command_argv(mkfs_argv);
+	if (!WIFEXITED(status) || (WEXITSTATUS(status) != 0)) {
+		error("%s: failed to mkfs / status:%u response:%s",
+			  __func__, status, mkfs_resp_msg);
+		xfree(mkfs_resp_msg);
+		return SLURM_ERROR;
+	}
+	if (mkfs_resp_msg == NULL) {
+		info("%s: mkfs returned no information", __func__);
+	} else {
+		debug3("%s: mkfs returned:%s.", __func__, mkfs_resp_msg);
+	}
+	xfree(mkfs_resp_msg);
+
+	return SLURM_SUCCESS;
+}
+
+// NEXTGenIO
+static int _mount_fsdax(char* filesystem_mountpoint, char* filesystem_device)
+{
+	int status = 0;
+	char **mount_argv;
+	char *mount_resp_msg;
+
+	if (xstrcmp(filesystem_mountpoint, "test_fail_mount") == 0) {
+		error("%s: Problem running mount command.", __func__);
+		return ESLURM_MOUNT_FILESYSTEM_FAIL;
+	}
+
+	// mount -o dax /dev/fsdax MOUNTPOINT
+	mount_argv = xmalloc(sizeof(char *) * 10);
+
+	mount_argv[0] = xstrdup("/usr/bin/mount");
+	mount_argv[1] = xstrdup("-o");
+	mount_argv[2] = xstrdup("dax");
+	mount_argv[3] = xstrdup(filesystem_device);
+	mount_argv[4] = xstrdup(filesystem_mountpoint);
+	mount_argv[5] = NULL;
+
+	debug3("%s: I will run:", __func__);
+	debug3("   %2d : %s", 0, mount_argv[0]);
+	debug3("   %2d : %s", 1, mount_argv[1]);
+	debug3("   %2d : %s", 2, mount_argv[2]);
+	debug3("   %2d : %s", 3, mount_argv[3]);
+	debug3("   %2d : %s", 4, mount_argv[4]);
+	debug3("   %2d : %s", 5, mount_argv[5]);
+	mount_resp_msg = run_command("mount", "/usr/bin/mount", mount_argv, 10000, &status);
+	free_command_argv(mount_argv);
+	if (!WIFEXITED(status) || (WEXITSTATUS(status) != 0)) {
+		error("%s: failed to mount / status:%u response:%s",
+			  __func__, status, mount_resp_msg);
+		xfree(mount_resp_msg);
+		return SLURM_ERROR;
+	}
+	if (mount_resp_msg == NULL) {
+		info("%s: mount returned no information", __func__);
+	} else {
+		debug3("%s: mount returned:%s.", __func__, mount_resp_msg);
+	}
+	xfree(mount_resp_msg);
+
+	return SLURM_SUCCESS;
+}
+
+// NEXTGenIO
+static int _fix_permissions_fsdax(char* filesystem_mountpoint)
+{
+	int status = 0;
+	char **chmod_argv;
+	char *chmod_resp_msg;
+
+	if (xstrcmp(filesystem_mountpoint, "test_fail_mount") == 0) {
+		error("%s: Problem running mount command.", __func__);
+		return ESLURM_MOUNT_FILESYSTEM_FAIL;
+	}
+
+	// chmod ga+w MOUNTPOINT
+	chmod_argv = xmalloc(sizeof(char *) * 10);
+
+	chmod_argv[0] = xstrdup("/usr/bin/chmod");
+	chmod_argv[1] = xstrdup("ga+w");
+	chmod_argv[2] = xstrdup(filesystem_mountpoint);
+	chmod_argv[3] = NULL;
+
+	debug3("%s: I will run:", __func__);
+	debug3("   %2d : %s", 0, chmod_argv[0]);
+	debug3("   %2d : %s", 1, chmod_argv[1]);
+	debug3("   %2d : %s", 2, chmod_argv[2]);
+	debug3("   %2d : %s", 3, chmod_argv[3]);
+	chmod_resp_msg = run_command("chmod", "/usr/bin/chmod", chmod_argv, 10000, &status);
+	free_command_argv(chmod_argv);
+	if (!WIFEXITED(status) || (WEXITSTATUS(status) != 0)) {
+		error("%s: failed to chmod %s / status:%u response:%s",
+			  __func__, filesystem_mountpoint, status, chmod_resp_msg);
+		xfree(chmod_resp_msg);
+		return SLURM_ERROR;
+	}
+	if (chmod_resp_msg == NULL) {
+		info("%s: chmod returned no information", __func__);
+	} else {
+		debug3("%s: chmod returned:%s.", __func__, chmod_resp_msg);
+	}
+	xfree(chmod_resp_msg);
+
+	return SLURM_SUCCESS;
+}
+
+static int _start_filesystem(char* filesystem_type, char* filesystem_device, char* filesystem_mountpoint,
+		char* filesystem_size, uint32_t uid, char* complete_nodelist, uint32_t nnodes, uint32_t job_id)
+{
+	int status = SLURM_ERROR;
+
+	if ( filesystem_status == 2 ) {
+		debug("%s: Filesystems have already been started. Returning.", __func__);
+		return SLURM_SUCCESS;
+	}
+	filesystem_status = 1; // Starting
+
+	debug2("%s: Let's create a(n) %s filesystem (dev:%s, mount:%s, size:%s) for job:%d",
+			__func__, filesystem_type, filesystem_device, filesystem_mountpoint, filesystem_size, job_id);
+
+	if (xstrcmp(filesystem_mountpoint, "test_fail_filesystem") == 0) {
+		error("%s: Problem running mkfs command. (%s)", __func__, filesystem_mountpoint);
+		return ESLURM_FILESYSTEM_START_FAIL;
+	}
+
+	if ((xstrcmp(filesystem_type, "ext3") == 0) ||
+		(xstrcmp(filesystem_type, "ext4") == 0) ||
+		(xstrcmp(filesystem_type, "xfs")  == 0)) {
+
+		// Create namespaces (if required)
+		status = _create_namespaces();
+		if ( status != SLURM_SUCCESS ) {
+			filesystem_status = 0;  // Not started
+			return status;
+		}
+
+		// Call mkfs on /dev/pmemXX
+		status = _make_fsdaxes(filesystem_type);
+		if ( status != SLURM_SUCCESS ) {
+			filesystem_status = 0;  // Not started
+			return ESLURM_FILESYSTEM_START_FAIL;
+		}
+
+		status = _mount_fsdax(filesystem_mountpoint, filesystem_device);
+		if ( status != SLURM_SUCCESS ) {
+			filesystem_status = 0;  // Not started
+			return ESLURM_FILESYSTEM_START_FAIL;
+		}
+
+		status = _fix_permissions_fsdax(filesystem_mountpoint);
+		if ( status != SLURM_SUCCESS ) {
+			filesystem_status = 0;  // Not started
+			return ESLURM_FILESYSTEM_START_FAIL;
+		}
+
+	} else if (xstrcmp(filesystem_type, "echofs-dax") == 0) {
+		debug2("%s: Not implemented yet",
+				__func__);
+		filesystem_status = 0;  // Not started
+
+
+
+	} else if (xstrcmp(filesystem_type, "echofs-devdax") == 0) {
+		debug2("%s: Not implemented yet",
+				__func__);
+		filesystem_status = 0;  // Not started
+
+
+
+	} else if (xstrcmp(filesystem_type, "gekkofs") == 0) {
+		status = _start_gekkofs(uid, complete_nodelist,
+				nnodes, filesystem_device, filesystem_mountpoint, filesystem_size,
+				job_id);
+		if ( status != SLURM_SUCCESS ) {
+			filesystem_status = 0;  // Not started
+			return ESLURM_FILESYSTEM_START_FAIL;
+		}
+
+	} else if (xstrcmp(filesystem_type, "dataclay") == 0) {
+		debug2("%s: Not implemented yet",
+				__func__);
+		filesystem_status = 0;  // Not started
+
+	} else {
+		error("%s: Filesystem type (%s) is unknown.", __func__, filesystem_type);
+		filesystem_status = 0;  // Not started
+
+		return ESLURM_FILESYSTEM_UNKOWN_TYPE;
+	}
+
+	filesystem_status = 2;  // Started
+	return SLURM_SUCCESS;
+}
+
+static int _start_service(char *service_type)
+{
+	int status = SLURM_ERROR;
+
+	if ( service_started == 1 ) {
+		debug("%s: Services have already been started. Returning.", __func__);
+		return SLURM_SUCCESS;
+	}
+	service_started = 1;
+
+	status = _service_start_service(service_type);
+	if ( status != SLURM_SUCCESS )
+		return ESLURM_SERVICE_START_FAIL;
+	sleep(1); // ToDo: Remove
+
+	status = _service_check_service(service_type, true);
+	if ( status != SLURM_SUCCESS )
+		return ESLURM_SERVICE_START_FAIL;
+
+	return SLURM_SUCCESS;
+}
+
+// NEXTGenIO
+static int _service_start_service(char* service_type)
+{
+	int status = SLURM_ERROR;
+	char **service_argv;
+	char *service_resp_msg;
+
+	service_argv = xmalloc(sizeof(char *) * 10);
+
+	service_argv[0] = xstrdup("/usr/bin/systemctl");
+	service_argv[1] = xstrdup("start");
+	service_argv[2] = xstrdup(service_type);
+	service_argv[3] = NULL;
+
+	debug3("%s: I will run:", __func__);
+	debug3("   %2d : %s", 0, service_argv[0]);
+	debug3("   %2d : %s", 1, service_argv[1]);
+	debug3("   %2d : %s", 2, service_argv[2]);
+	debug3("   %2d : %s", 3, service_argv[3]);
+	service_resp_msg = run_command("service_start", "/usr/bin/systemctl", service_argv, 10000, &status);
+	if (!WIFEXITED(status) || (WEXITSTATUS(status) != 0)) {
+		error("%s: failed to start service %s / status:%u response:%s",
+			  __func__, service_argv[2], status, service_resp_msg);
+		free_command_argv(service_argv);
+		xfree(service_resp_msg);
+		return SLURM_ERROR;
+	}
+	free_command_argv(service_argv);
+	if (service_resp_msg == NULL) {
+		info("%s: systemctl start returned no information", __func__);
+	} else {
+		debug3("%s: systemctl start returned:%s.", __func__, service_resp_msg);
+	}
+	xfree(service_resp_msg);
+
+	return SLURM_SUCCESS;
+}
+
+// NEXTGenIO
+static int _service_stop_service(char* service_type)
+{
+	int status = SLURM_ERROR;
+	char **service_argv;
+	char *service_resp_msg;
+
+	service_argv = xmalloc(sizeof(char *) * 10);
+
+	service_argv[0] = xstrdup("/usr/bin/systemctl");
+	service_argv[1] = xstrdup("stop");
+	service_argv[2] = xstrdup(service_type);
+	service_argv[3] = NULL;
+
+	debug3("%s: I will run:", __func__);
+	debug3("   %2d : %s", 0, service_argv[0]);
+	debug3("   %2d : %s", 1, service_argv[1]);
+	debug3("   %2d : %s", 2, service_argv[2]);
+	debug3("   %2d : %s", 3, service_argv[3]);
+	service_resp_msg = run_command("service_stop", "/usr/bin/systemctl", service_argv, 10000, &status);
+	if (!WIFEXITED(status) || (WEXITSTATUS(status) != 0)) {
+		error("%s: failed to stop service %s / status:%u response:%s",
+			  __func__, service_argv[2], status, service_resp_msg);
+		free_command_argv(service_argv);
+		xfree(service_resp_msg);
+		return SLURM_ERROR;
+	}
+	free_command_argv(service_argv);
+	if (service_resp_msg == NULL) {
+		info("%s: systemctl stop returned no information", __func__);
+	} else {
+		debug3("%s: systemctl stop returned:%s.", __func__, service_resp_msg);
+	}
+	xfree(service_resp_msg);
+
+	return SLURM_SUCCESS;
+}
+
+// NEXTGenIO
+static int _service_check_service(char* service_type, bool completed_status)
+{
+	int status = SLURM_ERROR;
+	char **service_argv;
+	char *service_resp_msg;
+
+	service_argv = xmalloc(sizeof(char *) * 10);
+
+	service_argv[0] = xstrdup("/usr/bin/systemctl");
+	service_argv[1] = xstrdup("is-active");
+	service_argv[2] = xstrdup(service_type);
+	service_argv[3] = NULL;
+
+	debug3("%s: I will run:", __func__);
+	debug3("   %2d : %s", 0, service_argv[0]);
+	debug3("   %2d : %s", 1, service_argv[1]);
+	debug3("   %2d : %s", 2, service_argv[2]);
+	debug3("   %2d : %s", 3, service_argv[3]);
+	service_resp_msg = run_command("service_check", "/usr/bin/systemctl", service_argv, 10000, &status);
+	if (!WIFEXITED(status) || (WEXITSTATUS(status) != 0)) {
+		error("%s: failed to query service %s / status:%u response:%s",
+			  __func__, service_argv[2], status, service_resp_msg);
+		free_command_argv(service_argv);
+		xfree(service_resp_msg);
+		return SLURM_ERROR;
+	}
+	free_command_argv(service_argv);
+	if (service_resp_msg == NULL) {
+		info("%s: systemctl is-active returned no information", __func__);
+	} else {
+		debug3("%s: systemctl is-active returned:%s.", __func__, service_resp_msg);
+		if ( (completed_status == true) && (xstrncmp("active", service_resp_msg, 6) == 0) ) {
+			debug3("%s: success: service:%s: requested status:%d, actual status:%s.",
+					__func__, service_type, completed_status, service_resp_msg);
+			status = SLURM_SUCCESS;
+		} else if ( (completed_status == false) &&
+				     ( (xstrncmp("inactive", service_resp_msg, 8) == 0) ||
+					   (xstrncmp("unknown", service_resp_msg, 7) == 0) ) ) {
+			debug3("%s: success: service:%s: requested status:%d, actual status:%s.",
+					__func__, service_type, completed_status, service_resp_msg);
+			status = SLURM_SUCCESS;
+		} else {
+			info("%s: FAIL: service:%s: requested status:%d, actual status:%s.",
+					__func__, service_type, completed_status, service_resp_msg);
+		}
+	}
+	xfree(service_resp_msg);
+
+	return status;
+}
+
+static int _optimise_for_energy_start()
+{
+	int status = SLURM_SUCCESS;
+
+	if ( optimise_energy_started == 1 ) {
+		debug("%s: Optimise for energy has already started. Returning.", __func__);
+		return SLURM_SUCCESS;
+	}
+
+	optimise_energy_started = 1;
+
+	status = _reduce_nvram_power();
+	if ( status != SLURM_SUCCESS ) {
+		optimise_energy_started = 0;  // Not started
+		return status;
+	}
+
+	status = _reduce_hdd_rpm();
+	if ( status != SLURM_SUCCESS ) {
+		optimise_energy_started = 0;  // Not started
+		return status;
+	}
+
+	status = _reduce_fan_rpm();
+	if ( status != SLURM_SUCCESS ) {
+		optimise_energy_started = 0;  // Not started
+		return status;
+	}
+
+	debug3("%s: Started.", __func__);
+
+	return status;
+}
+
+static int _reduce_nvram_power()
+{
+	int status = SLURM_SUCCESS;
+
+	debug3("%s: Not currently supported.", __func__);
+
+	return status;
+}
+
+static int _reduce_fan_rpm()
+{
+	int status = SLURM_SUCCESS;
+
+	debug3("%s: Not currently supported.", __func__);
+
+	return status;
+}
+
+static int _reduce_hdd_rpm()
+{
+	int status = SLURM_SUCCESS;
+
+	debug3("%s: Not currently supported.", __func__);
+
+	return status;
+}
+
+static int _optimise_for_energy_fini()
+{
+	int status = SLURM_SUCCESS;
+
+	if ( optimise_energy_started == 0 ) {
+		debug("%s: Optimise for energy has already been stopped. Returning.", __func__);
+		return SLURM_SUCCESS;
+	}
+
+	optimise_energy_started = 0;
+
+	debug3("%s: Started.", __func__);
+
+	return status;
 }

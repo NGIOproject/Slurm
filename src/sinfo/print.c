@@ -795,6 +795,27 @@ int _print_nodes_aiot(sinfo_data_t * sinfo_data, int width,
 	return SLURM_SUCCESS;
 }
 
+int _print_nvram(sinfo_data_t * sinfo_data, int width,
+		bool right_justify, char *suffix)
+{
+char id[FORMAT_STRING_SIZE];
+if (sinfo_data) {
+	if (sinfo_data->nvram_capacity == NO_VAL)
+		_print_str("n/a", width, right_justify, true);
+	else {
+		snprintf(id, FORMAT_STRING_SIZE, "%u/%u/%u",
+				sinfo_data->nvram_capacity, sinfo_data->nvram_memory_capacity,
+				sinfo_data->nvram_appdirect_capacity);
+		_print_str(id, width, right_justify, true);
+	}
+} else
+	_print_str("NVRAM(C/M/A)", width, right_justify, true);
+
+if (suffix)
+	printf("%s", suffix);
+return SLURM_SUCCESS;
+}
+
 int _print_partition(sinfo_data_t * sinfo_data, int width,
 			bool right_justify, char *suffix)
 {

@@ -155,6 +155,13 @@ static job_step_create_request_msg_t *_create_step_request(
 	step_req->tres_per_task = xstrdup(step_params->tres_per_task);
 	step_req->time_limit = step_params->time_limit;
 	step_req->user_id = (uint32_t)step_params->uid;
+	// NEXTGenIO
+	step_req->filesystem_device 	= xstrdup(step_params->filesystem_device);
+	step_req->filesystem_type 		= xstrdup(step_params->filesystem_type);
+	step_req->filesystem_mountpoint = xstrdup(step_params->filesystem_mountpoint);
+	step_req->filesystem_size 		= xstrdup(step_params->filesystem_size);
+	step_req->service_type 			= xstrdup(step_params->service_type);
+	step_req->optimise_for_energy   = step_params->optimise_for_energy;
 
 	return step_req;
 }

@@ -564,6 +564,13 @@ extern void *slurm_ctl_conf_2_key_pairs (slurm_ctl_conf_t* slurm_ctl_conf_ptr)
 		xstrdup(slurm_ctl_conf_ptr->acct_gather_filesystem_type);
 	list_append(ret_list, key_pair);
 
+	// NEXTGenIO
+	key_pair = xmalloc(sizeof(config_key_pair_t));
+	key_pair->name = xstrdup("AcctGatherNVRAMType");
+	key_pair->value =
+		xstrdup(slurm_ctl_conf_ptr->acct_gather_nvram_type);
+	list_append(ret_list, key_pair);
+
 	key_pair = xmalloc(sizeof(config_key_pair_t));
 	key_pair->name = xstrdup("AcctGatherInterconnectType");
 	key_pair->value =
@@ -1076,6 +1083,11 @@ extern void *slurm_ctl_conf_2_key_pairs (slurm_ctl_conf_t* slurm_ctl_conf_ptr)
 	key_pair = xmalloc(sizeof(config_key_pair_t));
 	key_pair->name = xstrdup("MessageTimeout");
 	key_pair->value = xstrdup(tmp_str);
+	list_append(ret_list, key_pair);
+
+	key_pair = xmalloc(sizeof(config_key_pair_t));
+	key_pair->name = xstrdup("MetaScheduler");
+	key_pair->value = xstrdup(slurm_ctl_conf_ptr->metascheduler);
 	list_append(ret_list, key_pair);
 
 	snprintf(tmp_str, sizeof(tmp_str), "%u sec",
@@ -1775,6 +1787,32 @@ extern void *slurm_ctl_conf_2_key_pairs (slurm_ctl_conf_t* slurm_ctl_conf_ptr)
 	key_pair->value = xstrdup(slurm_ctl_conf_ptr->x11_params);
 	list_append(ret_list, key_pair);
 
+	// NEXTGenIO
+	key_pair = xmalloc(sizeof(config_key_pair_t));
+	key_pair->name = xstrdup("FilesystemDevices");
+	key_pair->value = xstrdup(slurm_ctl_conf_ptr->filesystem_devices);
+	list_append(ret_list, key_pair);
+
+	key_pair = xmalloc(sizeof(config_key_pair_t));
+	key_pair->name = xstrdup("FilesystemTypes");
+	key_pair->value = xstrdup(slurm_ctl_conf_ptr->filesystem_types);
+	list_append(ret_list, key_pair);
+
+	key_pair = xmalloc(sizeof(config_key_pair_t));
+	key_pair->name = xstrdup("FilesystemMountpoints");
+	key_pair->value = xstrdup(slurm_ctl_conf_ptr->filesystem_mountpoints);
+	list_append(ret_list, key_pair);
+
+	key_pair = xmalloc(sizeof(config_key_pair_t));
+	key_pair->name = xstrdup("FilesystemSizes");
+	key_pair->value = xstrdup(slurm_ctl_conf_ptr->filesystem_sizes);
+	list_append(ret_list, key_pair);
+
+	key_pair = xmalloc(sizeof(config_key_pair_t));
+	key_pair->name = xstrdup("ServiceTypes");
+	key_pair->value = xstrdup(slurm_ctl_conf_ptr->service_types);
+	list_append(ret_list, key_pair);
+
 	return (void *)ret_list;
 }
 
@@ -2086,6 +2124,7 @@ static void _write_key_pairs(FILE* out, void *key_pairs)
 		    !xstrcasecmp(key_pair->name, "AccountingStoreJobComment") ||
 		    !xstrcasecmp(key_pair->name, "AcctGatherEnergyType") ||
 		    !xstrcasecmp(key_pair->name, "AcctGatherFilesystemType") ||
+		    !xstrcasecmp(key_pair->name, "AcctGatherNVRAMType") ||
 		    !xstrcasecmp(key_pair->name, "AcctGatherInterconnectType") ||
 		    !xstrcasecmp(key_pair->name, "AcctGatherNodeFreq") ||
 		    !xstrcasecmp(key_pair->name, "AcctGatherProfileType") ||
@@ -2119,7 +2158,8 @@ static void _write_key_pairs(FILE* out, void *key_pairs)
 		    !xstrcasecmp(key_pair->name, "PreemptMode") ||
 		    !xstrcasecmp(key_pair->name, "PreemptType") ||
 		    !xstrcasecmp(key_pair->name, "PriorityType") ||
-		    !xstrcasecmp(key_pair->name, "FastSchedule")) {
+		    !xstrcasecmp(key_pair->name, "FastSchedule")  ||
+		    !xstrcasecmp(key_pair->name, "MetaScheduler")) {
 			list_append(sched_list, temp);
 			continue;
 		}

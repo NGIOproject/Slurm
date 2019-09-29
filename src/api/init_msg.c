@@ -95,6 +95,12 @@ void slurm_init_job_desc_msg(job_desc_msg_t * job_desc_msg)
 	job_desc_msg->user_id		= NO_VAL;
 	job_desc_msg->wait_all_nodes	= NO_VAL16;
 	job_desc_msg->wait4switch	= NO_VAL;
+	job_desc_msg->workflow_id	    = NO_VAL;	// NEXTGenIO
+	job_desc_msg->workflow_start	= NO_VAL16;	// NEXTGenIO
+	job_desc_msg->workflow_end	    = NO_VAL16;	// NEXTGenIO
+	job_desc_msg->nvram_mode        = NO_VAL16;	// NEXTGenIO
+	job_desc_msg->nvram_size        = NO_VAL;	// NEXTGenIO
+	job_desc_msg->optimise_for_energy = NO_VAL8; // NEXTGenIO
 }
 
 /*

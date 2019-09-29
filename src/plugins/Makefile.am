@@ -4,6 +4,7 @@ SUBDIRS = \
 	acct_gather_profile	\
 	acct_gather_interconnect\
 	acct_gather_filesystem  \
+	acct_gather_nvram  \
 	auth			\
 	burst_buffer		\
 	checkpoint		\

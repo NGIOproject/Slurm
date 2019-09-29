@@ -234,6 +234,16 @@ extern int launch_common_create_job_step(srun_job_t *job, bool use_all_cpus,
 		job->ctx_params.cpu_count = opt_local->ntasks;
 	}
 
+	// NEXTGenIO
+	job->ctx_params.filesystem_device     = opt_local->filesystem_device;
+	job->ctx_params.filesystem_type       = opt_local->filesystem_type;
+	job->ctx_params.filesystem_mountpoint = opt_local->filesystem_mountpoint;
+	job->ctx_params.filesystem_size       = opt_local->filesystem_size;
+	job->ctx_params.service_type          = opt_local->service_type;
+	job->ctx_params.optimise_for_energy   = opt_local->optimise_for_energy;
+	job->ctx_params.nvram_mode            = opt_local->nvram_mode;
+	job->ctx_params.nvram_size            = opt_local->nvram_size;
+
 	job->ctx_params.cpu_freq_min = opt_local->cpu_freq_min;
 	job->ctx_params.cpu_freq_max = opt_local->cpu_freq_max;
 	job->ctx_params.cpu_freq_gov = opt_local->cpu_freq_gov;
@@ -303,7 +313,17 @@ extern int launch_common_create_job_step(srun_job_t *job, bool use_all_cpus,
 		job->ctx_params.name = opt_local->job_name;
 	else
 		job->ctx_params.name = srun_opt->cmd_name;
-	job->ctx_params.features = opt_local->constraints;
+
+	// NEXTGenIO
+	if (opt_local->nvram_mode != NO_VAL16) {
+		if ( opt_local->nvram_mode == 1 )
+			job->ctx_params.features = xstrdup("1LM");
+		else if ( opt_local->nvram_mode == 2 )
+			job->ctx_params.features = xstrdup("2LM");
+		else
+			job->ctx_params.features = opt_local->constraints;
+	} else
+		job->ctx_params.features = opt_local->constraints;
 
 	if (opt_local->cpus_per_gpu) {
 		xstrfmtcat(job->ctx_params.cpus_per_tres, "gpu:%d",

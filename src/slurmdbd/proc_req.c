@@ -1909,6 +1909,12 @@ static int  _job_complete(slurmdbd_conn_t *slurmdbd_conn,
 	job.start_protocol_ver = slurmdbd_conn->conn->version;
 	job.system_comment = job_comp_msg->system_comment;
 	job.tres_alloc_str = job_comp_msg->tres_alloc_str;
+	/* NEXTGenIO */
+	job.workflow_id               = job_comp_msg->workflow_id;
+	job.workflow_start            = job_comp_msg->workflow_start;
+	job.workflow_prior_dependency = job_comp_msg->workflow_prior_dependency;
+	job.workflow_post_dependency  = job_comp_msg->workflow_post_dependency;
+	job.workflow_end              = job_comp_msg->workflow_end;
 
 	job.details = &details;
 

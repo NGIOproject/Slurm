@@ -749,6 +749,29 @@ static int _fill_job_desc_from_opts(job_desc_msg_t *desc)
 	if (opt.mcs_label)
 		desc->mcs_label = xstrdup(opt.mcs_label);
 
+	/* NEXTGenIO */
+	desc->workflow_start             = opt.workflow_start;
+	if (opt.workflow_prior_dependency)
+		desc->workflow_prior_dependency  = xstrdup(opt.workflow_prior_dependency);
+	if (opt.workflow_post_dependency)
+		desc->workflow_post_dependency   = xstrdup(opt.workflow_post_dependency);
+	desc->workflow_end               = opt.workflow_end;
+	if (opt.filesystem_device)
+		desc->filesystem_device     = xstrdup(opt.filesystem_device);
+	if (opt.filesystem_type)
+		desc->filesystem_type       = xstrdup(opt.filesystem_type);
+	if (opt.filesystem_mountpoint)
+		desc->filesystem_mountpoint = xstrdup(opt.filesystem_mountpoint);
+	if (opt.filesystem_size)
+		desc->filesystem_size       = xstrdup(opt.filesystem_size);
+	if (opt.service_type)
+		desc->service_type          = xstrdup(opt.service_type);
+	desc->optimise_for_energy       = opt.optimise_for_energy;
+	if (opt.nvram_options) {
+		desc->nvram_mode            = opt.nvram_mode;
+		desc->nvram_size            = opt.nvram_size;
+	}
+
 	if (opt.cpus_per_gpu)
 		xstrfmtcat(desc->cpus_per_tres, "gpu:%d", opt.cpus_per_gpu);
 	if (opt.gpu_bind)

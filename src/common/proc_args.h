@@ -44,6 +44,12 @@
 #include "src/common/macros.h" /* true and false */
 #include "src/common/env.h"
 
+#if HAVE_JSON_C_INC
+#  include <json-c/json.h>
+#elif HAVE_JSON_INC
+#  include <json/json.h>
+#endif
+
 /* convert task state ID to equivalent string */
 extern char *format_task_dist_states(task_dist_states_t t);
 
@@ -106,6 +112,36 @@ bool verify_socket_core_thread_count(const char *arg, int *min_sockets,
 bool verify_hint(const char *arg, int *min_sockets, int *min_cores,
 		 int *min_threads, int *ntasks_per_core,
 		 cpu_bind_type_t *cpu_bind_type);
+
+/* verify the filesystem device */
+bool verify_filesystem_device(const char *arg);
+
+/* verify the filesystem type */
+bool verify_filesystem_type(const char *arg);
+
+/* verify the filesystem mountpoint */
+bool verify_filesystem_mountpoint(const char *arg, uid_t uid);
+
+/* verify the filesystem size */
+bool verify_filesystem_size(const char *arg);
+
+/* verify the service type */
+bool verify_service_type(const char *arg);
+
+/* verify NVRAM options */
+bool verify_nvram_options(const char *arg, uint16_t *nvram_mode, uint32_t *nvram_size);
+
+#if HAVE_JSON
+/* parse complex JSON objects */
+bool _json_parse_complex(json_object *jobj, char *key, int *num);
+
+/* parse simple JSON objects */
+bool _json_parse_simple(json_object *jobj, char *key, int *num);
+#endif
+/* verify MAP JSON options */
+bool verify_map_json(const char *arg, int *min_sockets, int *min_cores,
+		 int *min_threads, int *ntasks_per_core, char **hint_type, cpu_bind_type_t *cpu_bind_type);
+
 
 /* parse the mail type */
 uint16_t parse_mail_type(const char *arg);

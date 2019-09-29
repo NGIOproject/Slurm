@@ -931,7 +931,10 @@ extern int as_mysql_job_complete(mysql_conn_t *mysql_conn,
 	if (check_connection(mysql_conn) != SLURM_SUCCESS)
 		return ESLURM_DB_CONNECTION;
 
-	debug2("as_mysql_slurmdb_job_complete() called");
+	debug3("%s: called", __func__);
+
+	if ( (job_ptr->workflow_id != NO_VAL) && (job_ptr->workflow_id != 0) )
+		rc = as_mysql_job_complete_workflow(mysql_conn, job_ptr);
 
 	if (job_ptr->resize_time)
 		submit_time = job_ptr->resize_time;
@@ -1074,6 +1077,60 @@ extern int as_mysql_job_complete(mysql_conn_t *mysql_conn,
 	xfree(query);
 end_it:
 	xfree(tres_alloc_str);
+	return rc;
+}
+
+extern int as_mysql_job_complete_workflow(mysql_conn_t *mysql_conn,
+		 struct job_record *job_ptr)
+{
+	char *query = NULL;
+	int rc = SLURM_SUCCESS;
+	int reinit = 0;
+
+	if (check_connection(mysql_conn) != SLURM_SUCCESS)
+		return ESLURM_DB_CONNECTION;
+
+	debug3("as_mysql_slurmdb_job_complete_workflow() called");
+
+	query = xstrdup_printf(
+				"insert into \"%s_%s\" "
+				"(id_workflows, id_job, workflow_start, "
+				"workflow_end",
+				mysql_conn->cluster_name, workflow_table);
+
+	if (job_ptr->workflow_prior_dependency)
+		xstrcat(query, ", workflow_prior");
+	if (job_ptr->workflow_post_dependency)
+		xstrcat(query, ", workflow_post");
+
+	xstrfmtcat(query,
+			        ") values (%u, %u, %u, %u",
+					job_ptr->workflow_id, job_ptr->job_id,
+					job_ptr->workflow_start, job_ptr->workflow_end);
+
+	if (job_ptr->workflow_prior_dependency)
+		xstrfmtcat(query, ", '%s'", job_ptr->workflow_prior_dependency);
+	if (job_ptr->workflow_post_dependency)
+		xstrfmtcat(query, ", '%s'", job_ptr->workflow_post_dependency);
+
+	xstrfmtcat(query, ");");
+
+	if (debug_flags & DEBUG_FLAG_DB_JOB)
+		DB_DEBUG(mysql_conn->conn, "query\n%s", query);
+try_again:
+	if (!(mysql_db_insert_ret_id(mysql_conn, query))) {
+		if (!reinit) {
+			error("It looks like the storage has gone "
+			      "away trying to reconnect");
+			/* reconnect */
+			check_connection(mysql_conn);
+			reinit = 1;
+			goto try_again;
+		} else
+			rc = SLURM_ERROR;
+	}
+
+	xfree(query);
 	return rc;
 }
 

@@ -997,6 +997,14 @@ static int _fill_job_desc_from_opts(job_desc_msg_t *desc)
 	if (opt.mem_per_gpu)
 		xstrfmtcat(desc->mem_per_tres, "gpu:%"PRIi64, opt.mem_per_gpu);
 
+	/* NEXTGenIO */
+	desc->workflow_start             = opt.workflow_start;
+	if (opt.workflow_prior_dependency)
+		desc->workflow_prior_dependency  = xstrdup(opt.workflow_prior_dependency);
+	if (opt.workflow_post_dependency)
+		desc->workflow_post_dependency   = xstrdup(opt.workflow_post_dependency);
+	desc->workflow_end               = opt.workflow_end;
+
 	return 0;
 }
 

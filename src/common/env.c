@@ -821,6 +821,18 @@ int setup_env(env_t *env, bool preserve_env)
 		}
 	}
 
+	// NEXTGenIO
+	if (env->filesystem_mountpoint) {
+		if (setenvf(&env->env,
+			    "SLURM_FILESYSTEM_MOUNTPOINT",
+			    "%s",
+			    env->filesystem_mountpoint)) {
+			error("%s: can't set SLURM_FILESYSTEM_MOUNTPOINT env variable",
+				__func__);
+			rc = SLURM_FAILURE;
+		}
+	}
+
 	if (slurmctld_conf.slurmctld_addr)
 		addr = slurmctld_conf.slurmctld_addr;
 	else

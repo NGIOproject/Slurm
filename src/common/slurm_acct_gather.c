@@ -42,6 +42,7 @@
 #include "slurm_acct_gather_energy.h"
 #include "slurm_acct_gather_interconnect.h"
 #include "slurm_acct_gather_filesystem.h"
+#include "slurm_acct_gather_nvram.h"
 #include "src/common/xstring.h"
 
 static bool acct_gather_suspended = false;
@@ -89,6 +90,8 @@ extern int acct_gather_conf_init(void)
 						      &full_options_cnt);
 	rc += acct_gather_filesystem_g_conf_options(&full_options,
 						    &full_options_cnt);
+	rc += acct_gather_nvram_g_conf_options(&full_options,
+						    &full_options_cnt);			// NEXTGenIO
 	/* ADD MORE HERE */
 
 	/* for the NULL at the end */
@@ -128,6 +131,7 @@ extern int acct_gather_conf_init(void)
 	rc += acct_gather_profile_g_conf_set(tbl);
 	rc += acct_gather_interconnect_g_conf_set(tbl);
 	rc += acct_gather_filesystem_g_conf_set(tbl);
+	rc += acct_gather_nvram_g_conf_set(tbl);		// NEXTGenIO
 	/*********************************************************************/
 	/* ADD MORE HERE AND FREE MEMORY IN acct_gather_conf_destroy() BELOW */
 	/*********************************************************************/
@@ -153,6 +157,8 @@ extern int acct_gather_conf_destroy(void)
 	rc = MAX(rc, rc2);
 	rc2 = acct_gather_profile_fini();
 	rc = MAX(rc, rc2);
+	rc2 = acct_gather_nvram_fini();		// NEXTGenIO
+	rc = MAX(rc, rc2);
 
 	slurm_mutex_destroy(&conf_mutex);
 	return rc;
@@ -168,6 +174,7 @@ extern List acct_gather_conf_values(void)
 	acct_gather_interconnect_g_conf_values(&acct_list);
 	acct_gather_energy_g_conf_values(&acct_list);
 	acct_gather_filesystem_g_conf_values(&acct_list);
+	acct_gather_nvram_g_conf_values(&acct_list);	// NEXTGenio
 	/* ADD MORE HERE */
 	slurm_mutex_unlock(&conf_mutex);
 	/******************************************/
@@ -202,6 +209,10 @@ extern int acct_gather_parse_freq(int type, char *freq)
 	case PROFILE_FILESYSTEM:
 		if ((sub_str = xstrcasestr(freq, "filesystem=")))
 			freq_int = _get_int(sub_str + 11);
+		break;
+	case PROFILE_NVRAM:
+		if ((sub_str = xstrcasestr(freq, "nvram=")))
+			freq_int = _get_int(sub_str + 6);
 		break;
 	case PROFILE_NETWORK:
 		if ((sub_str = xstrcasestr(freq, "network=")))

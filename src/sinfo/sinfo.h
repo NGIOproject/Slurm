@@ -93,6 +93,11 @@ typedef struct {
 	uint64_t min_free_mem;
 	uint64_t max_free_mem;
 
+	uint32_t nvram_capacity;			// NEXTGenIO
+	uint32_t nvram_memory_capacity;		// NEXTGenIO
+	uint32_t nvram_appdirect_capacity;	// NEXTGenIO
+	uint16_t nvram_number_of_namespaces;// NEXTGenIO
+
 	uint32_t max_cpus_per_node;
 	uint64_t alloc_memory;
 
@@ -153,6 +158,7 @@ struct sinfo_match_flags {
 	bool free_mem_flag;
 	bool max_cpus_per_node_flag;
 	bool version_flag;
+	bool nvram_flag;		// NEXTGenIO
 };
 
 /* Input parameters */

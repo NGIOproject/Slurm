@@ -108,6 +108,8 @@ void print_sinfo_reservation(reserve_info_msg_t *resv_ptr);
 	format_add_function(list,wid,right,suffix,_print_nodes_aiot)
 #define format_add_nodes_ai(list,wid,right,suffix) \
 	format_add_function(list,wid,right,suffix,_print_nodes_ai)
+#define format_add_nvram(list,wid,right,suffix) \
+	format_add_function(list,wid,right,suffix,_print_nvram)
 #define format_add_partition(list,wid,right,suffix) \
 	format_add_function(list,wid,right,suffix,_print_partition)
 #define format_add_partition_name(list,wid,right,suffix) \
@@ -204,6 +206,8 @@ int _print_nodes_t(sinfo_data_t * sinfo_data, int width,
 int _print_nodes_ai(sinfo_data_t * sinfo_data, int width,
 			bool right_justify, char *suffix);
 int _print_nodes_aiot(sinfo_data_t * sinfo_data, int width,
+			bool right_justify, char *suffix);
+int _print_nvram(sinfo_data_t * sinfo_data, int width,
 			bool right_justify, char *suffix);
 int _print_oversubscribe(sinfo_data_t * sinfo_data, int width,
 			bool right_justify, char *suffix);

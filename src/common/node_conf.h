@@ -78,6 +78,11 @@ struct config_record {
 	char *gres;		/* arbitrary list of node's generic resources */
 	char *nodes;		/* name of nodes with this configuration */
 	bitstr_t *node_bitmap;	/* bitmap of nodes with this configuration */
+	uint16_t has_nvram;  				/* Is NVRAM present? */			// NEXTGenIO
+	uint32_t nvram_capacity; 			/* Total NVRAM in GBs */ 		// NEXTGenIO
+	uint32_t nvram_memory_capacity; 	/* Memory NVRAM in GBs */ 		// NEXTGenIO
+	uint32_t nvram_appdirect_capacity; 	/* AppDirect NVRAM in GBs */ 	// NEXTGenIO
+	uint16_t nvram_number_of_namespaces;/* Namespaces */				// NEXTGenIO
 };
 extern List config_list;	/* list of config_record entries */
 
@@ -175,6 +180,11 @@ struct node_record {
 	char *tres_fmt_str;		/* tres this node has */
 	uint64_t *tres_cnt;		/* tres this node has. NO_PACK*/
 	char *mcs_label;		/* mcs_label if mcs plugin in use */
+	uint16_t has_nvram;  				/* Is NVRAM present? */			// NEXTGenIO
+	uint32_t nvram_capacity; 			/* Total NVRAM in GBs */ 		// NEXTGenIO
+	uint32_t nvram_memory_capacity; 	/* Memory NVRAM in GBs */ 		// NEXTGenIO
+	uint32_t nvram_appdirect_capacity; 	/* AppDirect NVRAM in GBs */ 	// NEXTGenIO
+	uint16_t nvram_number_of_namespaces;/* Namespaces */				// NEXTGenIO
 };
 extern struct node_record *node_record_table_ptr;  /* ptr to node records */
 extern int node_record_count;		/* count in node_record_table_ptr */

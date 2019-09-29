@@ -478,6 +478,9 @@ AC_CONFIG_FILES([Makefile
 		 src/plugins/acct_gather_filesystem/Makefile
 		 src/plugins/acct_gather_filesystem/lustre/Makefile
 		 src/plugins/acct_gather_filesystem/none/Makefile
+		 src/plugins/acct_gather_nvram/Makefile
+		 src/plugins/acct_gather_nvram/intel/Makefile
+		 src/plugins/acct_gather_nvram/none/Makefile
 		 src/plugins/acct_gather_profile/Makefile
 		 src/plugins/acct_gather_profile/hdf5/Makefile
 		 src/plugins/acct_gather_profile/hdf5/sh5util/Makefile
@@ -546,6 +549,7 @@ AC_CONFIG_FILES([Makefile
 		 src/plugins/node_features/Makefile
 		 src/plugins/node_features/knl_cray/Makefile
 		 src/plugins/node_features/knl_generic/Makefile
+		 src/plugins/node_features/nvram_generic/Makefile
 		 src/plugins/power/Makefile
 		 src/plugins/power/common/Makefile
 		 src/plugins/power/cray/Makefile
@@ -557,6 +561,7 @@ AC_CONFIG_FILES([Makefile
 		 src/plugins/priority/Makefile
 		 src/plugins/priority/basic/Makefile
 		 src/plugins/priority/multifactor/Makefile
+		 src/plugins/priority/multifactorworkflows/Makefile
 		 src/plugins/proctrack/Makefile
 		 src/plugins/proctrack/cray/Makefile
 		 src/plugins/proctrack/cgroup/Makefile

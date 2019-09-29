@@ -770,9 +770,16 @@ static bool _match_node_data(sinfo_data_t *sinfo_ptr, node_info_t *node_ptr)
 
 	if (sinfo_ptr->nodes &&
 	    params.match_flags.reason_user_flag &&
-	    node_ptr->reason_uid != sinfo_ptr->reason_uid) {
+	    node_ptr->reason_uid != sinfo_ptr->reason_uid)
 		return false;
-	}
+
+	// NEXTGenIO
+	if (sinfo_ptr->nodes &&
+	    params.match_flags.nvram_flag &&
+	    ( (node_ptr->nvram_capacity != sinfo_ptr->nvram_capacity) ||
+	    	(node_ptr->nvram_memory_capacity != sinfo_ptr->nvram_memory_capacity) ||
+			(node_ptr->nvram_appdirect_capacity != sinfo_ptr->nvram_appdirect_capacity) ) )
+		return false;
 
 	if (params.match_flags.state_flag) {
 		char *state1, *state2;
@@ -958,6 +965,10 @@ static void _update_sinfo(sinfo_data_t *sinfo_ptr, node_info_t *node_ptr)
 		sinfo_ptr->max_cpus_per_node = sinfo_ptr->part_info->
 					       max_cpus_per_node;
 		sinfo_ptr->version    = node_ptr->version;
+		sinfo_ptr->nvram_capacity = node_ptr->nvram_capacity;						// NEXTGenIO
+		sinfo_ptr->nvram_memory_capacity = node_ptr->nvram_memory_capacity;			// NEXTGenIO
+		sinfo_ptr->nvram_appdirect_capacity = node_ptr->nvram_appdirect_capacity;	// NEXTGenIO
+		sinfo_ptr->nvram_number_of_namespaces = node_ptr->nvram_number_of_namespaces;// NEXTGenIO
 	} else if (hostlist_find(sinfo_ptr->nodes, node_ptr->name) != -1) {
 		/* we already have this node in this record,
 		 * just return, don't duplicate */

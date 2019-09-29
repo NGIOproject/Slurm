@@ -313,6 +313,22 @@ slurm_sprint_job_step_info ( job_step_info_t * job_step_ptr,
 		xstrfmtcat(out, "TresPerTask=%s", job_step_ptr->tres_per_task);
 	}
 
+	// NEXTGenIO
+	/****** Line (optional) ******/
+	if (job_step_ptr->filesystem_type) {
+		xstrcat(out, line_end);
+		xstrfmtcat(out, "Filesystem type=%s, Device=%s, Mountpoint=%s, Size=%s",
+				job_step_ptr->filesystem_type, job_step_ptr->filesystem_device, job_step_ptr->filesystem_mountpoint, job_step_ptr->filesystem_size);
+	}
+
+	if (job_step_ptr->service_type) {
+		xstrcat(out, line_end);
+		xstrfmtcat(out, "Service type=%s", job_step_ptr->service_type);
+	}
+
+	xstrcat(out, line_end);
+	xstrfmtcat(out, "Optimise for energy=%s", job_step_ptr->optimise_for_energy ? "no" : "yes");
+
 	/****** END OF JOB RECORD ******/
 	if (one_liner)
 		xstrcat(out, "\n");

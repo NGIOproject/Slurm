@@ -53,6 +53,7 @@
 #include "src/common/plugin.h"
 #include "src/common/plugrack.h"
 #include "src/common/read_config.h"
+#include "src/common/slurm_acct_gather_nvram.h"
 #include "src/common/slurm_acct_gather_filesystem.h"
 #include "src/common/slurm_acct_gather_interconnect.h"
 #include "src/common/slurm_acct_gather_profile.h"
@@ -272,6 +273,9 @@ extern int acct_gather_profile_fini(void)
 		case PROFILE_FILESYSTEM:
 			acct_gather_filesystem_fini();
 			break;
+		case PROFILE_NVRAM:
+			acct_gather_nvram_fini();
+			break;
 		case PROFILE_NETWORK:
 			acct_gather_interconnect_fini();
 			break;
@@ -324,6 +328,11 @@ extern char *acct_gather_profile_to_string(uint32_t profile)
 				strcat(profile_str, ",");
 			strcat(profile_str, "Task");
 		}
+		if (profile & ACCT_GATHER_PROFILE_NVRAM) {
+			if (profile_str[0])
+				strcat(profile_str, ",");
+			strcat(profile_str, "NVRAM");
+		}
 	}
 	return profile_str;
 }
@@ -348,6 +357,9 @@ extern uint32_t acct_gather_profile_from_string(char *profile_str)
 
 		if (xstrcasestr(profile_str, "network"))
 			profile |= ACCT_GATHER_PROFILE_NETWORK;
+
+		if (xstrcasestr(profile_str, "NVRAM"))
+			profile |= ACCT_GATHER_PROFILE_NVRAM;
 	}
 
 	return profile;
@@ -363,6 +375,8 @@ extern char *acct_gather_profile_type_to_string(uint32_t series)
 		return "Lustre";
 	else if (series == ACCT_GATHER_PROFILE_NETWORK)
 		return "Network";
+	else if (series == ACCT_GATHER_PROFILE_NVRAM)
+		return "NVRAM";
 
 	return "Unknown";
 }
@@ -377,6 +391,8 @@ extern uint32_t acct_gather_profile_type_from_string(char *series_str)
 		return ACCT_GATHER_PROFILE_LUSTRE;
 	else if (!xstrcasecmp(series_str, "network"))
 		return ACCT_GATHER_PROFILE_NETWORK;
+	else if (!xstrcasecmp(series_str, "NVRAM"))
+		return ACCT_GATHER_PROFILE_NVRAM;
 
 	return ACCT_GATHER_PROFILE_NOT_SET;
 }
@@ -392,6 +408,9 @@ extern char *acct_gather_profile_type_t_name(acct_gather_profile_type_t type)
 		break;
 	case PROFILE_FILESYSTEM:
 		return "Lustre";
+		break;
+	case PROFILE_NVRAM:
+		return "NVRAM";
 		break;
 	case PROFILE_NETWORK:
 		return "Network";
@@ -497,6 +516,14 @@ extern int acct_gather_profile_startpoll(char *freq, char *freq_def)
 			acct_gather_filesystem_startpoll(
 				acct_gather_profile_timer[i].freq);
 			break;
+		case PROFILE_NVRAM:
+			if (!(profile & ACCT_GATHER_PROFILE_NVRAM))
+				break;
+			_set_freq(i, freq, freq_def);
+
+			acct_gather_nvram_startpoll(
+					acct_gather_profile_timer[i].freq);
+			break;
 		case PROFILE_NETWORK:
 			if (!(profile & ACCT_GATHER_PROFILE_NETWORK))
 				break;
@@ -546,6 +573,8 @@ extern void acct_gather_profile_endpoll(void)
 			jobacct_gather_endpoll();
 			break;
 		case PROFILE_FILESYSTEM:
+			break;
+        case PROFILE_NVRAM:
 			break;
 		case PROFILE_NETWORK:
 			break;

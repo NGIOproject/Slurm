@@ -60,6 +60,7 @@ typedef enum {
 	PROFILE_ENERGY,
 	PROFILE_TASK,
 	PROFILE_FILESYSTEM,
+	PROFILE_NVRAM,
 	PROFILE_NETWORK,
 	PROFILE_CNT
 } acct_gather_profile_type_t;

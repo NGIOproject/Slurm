@@ -198,6 +198,7 @@ s_p_options_t slurm_conf_options[] = {
 	{"AcctGatherInterconnectType", S_P_STRING},
 	{"AcctGatherInfinibandType", S_P_STRING},
 	{"AcctGatherFilesystemType", S_P_STRING},
+	{"AcctGatherNVRAMType", S_P_STRING},		// NEXTGenIO
 	{"AllowSpecResourcesUsage", S_P_BOOLEAN},
 	{"AuthInfo", S_P_STRING},
 	{"AuthType", S_P_STRING},
@@ -240,6 +241,10 @@ s_p_options_t slurm_conf_options[] = {
 	{"FairShareDampeningFactor", S_P_UINT16},
 	{"FastSchedule", S_P_UINT16},
 	{"FederationParameters", S_P_STRING},
+	{"FilesystemDevices", S_P_STRING},			// NEXTGenIO
+	{"FilesystemMountpoints", S_P_STRING},		// NEXTGenIO
+	{"FilesystemTypes", S_P_STRING},			// NEXTGenIO
+	{"FilesystemSizes", S_P_STRING},			// NEXTGenIO
 	{"FirstJobId", S_P_UINT32},
 	{"GetEnvTimeout", S_P_UINT16},
 	{"GresTypes", S_P_STRING},
@@ -286,6 +291,7 @@ s_p_options_t slurm_conf_options[] = {
 	{"MCSPlugin", S_P_STRING},
 	{"MemLimitEnforce", S_P_STRING},
 	{"MessageTimeout", S_P_UINT16},
+	{"MetaScheduler", S_P_STRING},		// NEXTGenIO
 	{"MinJobAge", S_P_UINT32},
 	{"MpiDefault", S_P_STRING},
 	{"MpiParams", S_P_STRING},
@@ -344,6 +350,7 @@ s_p_options_t slurm_conf_options[] = {
 	{"SchedulerType", S_P_STRING},
 	{"SelectType", S_P_STRING},
 	{"SelectTypeParameters", S_P_STRING},
+	{"ServiceTypes", S_P_STRING},				// NEXTGenIO
 	{"SlurmUser", S_P_STRING},
 	{"SlurmdUser", S_P_STRING},
 	{"SlurmctldAddr", S_P_STRING},
@@ -2821,6 +2828,7 @@ free_slurm_conf (slurm_ctl_conf_t *ctl_conf_ptr, bool purge_node_hash)
 	xfree (ctl_conf_ptr->acct_gather_profile_type);
 	xfree (ctl_conf_ptr->acct_gather_interconnect_type);
 	xfree (ctl_conf_ptr->acct_gather_filesystem_type);
+	xfree (ctl_conf_ptr->acct_gather_nvram_type);		// NEXTGenIO
 	xfree (ctl_conf_ptr->authinfo);
 	xfree (ctl_conf_ptr->authtype);
 	xfree (ctl_conf_ptr->bb_type);
@@ -2842,6 +2850,10 @@ free_slurm_conf (slurm_ctl_conf_t *ctl_conf_ptr, bool purge_node_hash)
 	FREE_NULL_LIST(ctl_conf_ptr->ext_sensors_conf);
 	xfree (ctl_conf_ptr->ext_sensors_type);
 	xfree (ctl_conf_ptr->fed_params);
+	xfree (ctl_conf_ptr->filesystem_devices);		// NEXTGenIO
+	xfree (ctl_conf_ptr->filesystem_types);			// NEXTGenIO
+	xfree (ctl_conf_ptr->filesystem_mountpoints);	// NEXTGenIO
+	xfree (ctl_conf_ptr->filesystem_sizes);			// NEXTGenIO
 	xfree (ctl_conf_ptr->gres_plugins);
 	xfree (ctl_conf_ptr->health_check_program);
 	xfree (ctl_conf_ptr->job_acct_gather_freq);
@@ -2865,6 +2877,7 @@ free_slurm_conf (slurm_ctl_conf_t *ctl_conf_ptr, bool purge_node_hash)
 	xfree (ctl_conf_ptr->licenses_used);
 	xfree (ctl_conf_ptr->mail_domain);
 	xfree (ctl_conf_ptr->mail_prog);
+	xfree (ctl_conf_ptr->metascheduler);		// NEXTGenIO
 	xfree (ctl_conf_ptr->mcs_plugin);
 	xfree (ctl_conf_ptr->mcs_plugin_params);
 	xfree (ctl_conf_ptr->mpi_default);
@@ -2901,6 +2914,7 @@ free_slurm_conf (slurm_ctl_conf_t *ctl_conf_ptr, bool purge_node_hash)
 	xfree (ctl_conf_ptr->sched_params);
 	xfree (ctl_conf_ptr->schedtype);
 	xfree (ctl_conf_ptr->select_type);
+	xfree (ctl_conf_ptr->service_types);	// NEXTGenIO
 	FREE_NULL_LIST(ctl_conf_ptr->select_conf_key_pairs);
 	xfree (ctl_conf_ptr->slurm_conf);
 	xfree (ctl_conf_ptr->slurm_user_name);
@@ -2984,6 +2998,7 @@ init_slurm_conf (slurm_ctl_conf_t *ctl_conf_ptr)
 	xfree (ctl_conf_ptr->acct_gather_profile_type);
 	xfree (ctl_conf_ptr->acct_gather_interconnect_type);
 	xfree (ctl_conf_ptr->acct_gather_filesystem_type);
+	xfree (ctl_conf_ptr->acct_gather_nvram_type);	// NEXTGenIO
 	ctl_conf_ptr->ext_sensors_freq		= 0;
 	xfree (ctl_conf_ptr->ext_sensors_type);
 	ctl_conf_ptr->enforce_part_limits       = 0;
@@ -2991,6 +3006,10 @@ init_slurm_conf (slurm_ctl_conf_t *ctl_conf_ptr)
 	ctl_conf_ptr->epilog_msg_time		= NO_VAL;
 	ctl_conf_ptr->fast_schedule		= NO_VAL16;
 	xfree(ctl_conf_ptr->fed_params);
+	xfree(ctl_conf_ptr->filesystem_devices);		// NEXTGenIO
+	xfree(ctl_conf_ptr->filesystem_types);			// NEXTGenIO
+	xfree(ctl_conf_ptr->filesystem_mountpoints);	// NEXTGenIO
+	xfree(ctl_conf_ptr->filesystem_sizes);			// NEXTGenIO
 	ctl_conf_ptr->first_job_id		= NO_VAL;
 	ctl_conf_ptr->get_env_timeout		= 0;
 	xfree(ctl_conf_ptr->gres_plugins);
@@ -3033,6 +3052,7 @@ init_slurm_conf (slurm_ctl_conf_t *ctl_conf_ptr)
 	xfree(ctl_conf_ptr->mcs_plugin);
 	xfree(ctl_conf_ptr->mcs_plugin_params);
 	ctl_conf_ptr->mem_limit_enforce         = false;
+	xfree (ctl_conf_ptr->metascheduler);			// NEXTGenIO
 	ctl_conf_ptr->min_job_age = NO_VAL;
 	xfree (ctl_conf_ptr->mpi_default);
 	xfree (ctl_conf_ptr->mpi_params);
@@ -3076,6 +3096,7 @@ init_slurm_conf (slurm_ctl_conf_t *ctl_conf_ptr)
 	xfree( ctl_conf_ptr->sched_params );
 	ctl_conf_ptr->sched_time_slice		= NO_VAL16;
 	xfree( ctl_conf_ptr->schedtype );
+	xfree(ctl_conf_ptr->service_types);			// NEXTGenIO
 	xfree( ctl_conf_ptr->select_type );
 	ctl_conf_ptr->select_type_param         = NO_VAL16;
 	ctl_conf_ptr->slurm_user_id		= NO_VAL16;
@@ -3506,6 +3527,29 @@ static bool _have_hbm_token(char *gres_plugins)
 	return rc;
 }
 
+/* Return TRUE if a comma-delimited token "nvmem" is found */
+static bool _have_nvmem_token(char *gres_plugins)
+{
+	char *tmp, *tok, *save_ptr = NULL;
+	bool rc = false;
+
+	if (!gres_plugins)
+		return false;
+
+	tmp = xstrdup(gres_plugins);
+	tok = strtok_r(tmp, ",", &save_ptr);
+	while (tok) {
+		if (!xstrcasecmp(tok, "nvmem")) {
+			rc = true;
+			break;
+		}
+		tok = strtok_r(NULL, ",", &save_ptr);
+	}
+	xfree(tmp);
+
+	return rc;
+}
+
 /*
  *
  * IN/OUT ctl_conf_ptr - a configuration as loaded by read_slurm_conf_ctl
@@ -3578,6 +3622,12 @@ _validate_and_set_defaults(slurm_ctl_conf_t *conf, s_p_hashtbl_t *hashtbl)
 			   "AcctGatherFilesystemType", hashtbl))
 		conf->acct_gather_filesystem_type =
 			xstrdup(DEFAULT_ACCT_GATHER_FILESYSTEM_TYPE);
+
+	// NEXTGenIO
+	if (!s_p_get_string(&conf->acct_gather_nvram_type,
+			"AcctGatherNVRAMType", hashtbl))
+		conf->acct_gather_nvram_type =
+			xstrdup(DEFAULT_ACCT_GATHER_NVRAM_TYPE);
 
 	if (!s_p_get_uint16(&conf->acct_gather_node_freq,
 			    "AcctGatherNodeFreq", hashtbl))
@@ -3744,6 +3794,20 @@ _validate_and_set_defaults(slurm_ctl_conf_t *conf, s_p_hashtbl_t *hashtbl)
 
 	(void) s_p_get_string(&conf->fed_params, "FederationParameters",
 			      hashtbl);
+
+	// NEXTGenIO
+	if (!s_p_get_string(&conf->filesystem_devices, "FilesystemDevices", hashtbl))
+			conf->filesystem_devices = xstrdup("");
+
+	if (!s_p_get_string(&conf->filesystem_types, "FilesystemTypes", hashtbl))
+			conf->filesystem_types = xstrdup("");
+
+	if (!s_p_get_string(&conf->filesystem_mountpoints, "FilesystemMountpoints", hashtbl))
+			conf->filesystem_mountpoints = xstrdup("");
+
+	if (!s_p_get_string(&conf->filesystem_sizes, "FilesystemSizes", hashtbl))
+			conf->filesystem_sizes = xstrdup("");
+
 
 	if (!s_p_get_uint32(&conf->first_job_id, "FirstJobId", hashtbl))
 		conf->first_job_id = DEFAULT_FIRST_JOB_ID;
@@ -4007,6 +4071,21 @@ _validate_and_set_defaults(slurm_ctl_conf_t *conf, s_p_hashtbl_t *hashtbl)
 		}
 	}
 
+	// NEXTGeNIO
+	if (s_p_get_string(&temp_str,
+			   "MetaScheduler", hashtbl)) {
+		if (parse_metascheduler_type(temp_str) < 0) {
+			error("Bad MetaScheduler type: %s", temp_str);
+			xfree(temp_str);
+			return SLURM_ERROR;
+		}
+		conf->metascheduler = xstrdup(temp_str);
+		xfree(temp_str);
+	} else {
+		conf->metascheduler = xstrdup("");
+	}
+
+
 	if (!s_p_get_uint32(&conf->min_job_age, "MinJobAge", hashtbl))
 		conf->min_job_age = DEFAULT_MIN_JOB_AGE;
 	else if (conf->min_job_age < 2) {
@@ -4061,6 +4140,16 @@ _validate_and_set_defaults(slurm_ctl_conf_t *conf, s_p_hashtbl_t *hashtbl)
 			xstrcat(conf->gres_plugins, ",hbm");
 		else
 			xstrcat(conf->gres_plugins, "hbm");
+	}
+
+	// NEXTGenIO
+	if (xstrstr(conf->node_features_plugins, "nvram_") &&
+	    !_have_nvmem_token(conf->gres_plugins)) {
+		/* NVRAM nodes implicitly add GRES type of "nvmem" */
+		if (conf->gres_plugins && conf->gres_plugins[0])
+			xstrcat(conf->gres_plugins, ",nvmem");
+		else
+			xstrcat(conf->gres_plugins, "nvmem");
 	}
 
 	if (!s_p_get_string(&conf->accounting_storage_tres,
@@ -4570,6 +4659,10 @@ _validate_and_set_defaults(slurm_ctl_conf_t *conf, s_p_hashtbl_t *hashtbl)
 
 	if (!s_p_get_string(&conf->select_type, "SelectType", hashtbl))
 		conf->select_type = xstrdup(DEFAULT_SELECT_TYPE);
+
+	// NEXTGenIO
+	if (!s_p_get_string(&conf->service_types, "ServiceTypes", hashtbl))
+			conf->service_types = xstrdup("");
 
 	if (s_p_get_string(&temp_str,
 			   "SelectTypeParameters", hashtbl)) {
@@ -5306,6 +5399,11 @@ extern char * debug_flags2str(uint64_t debug_flags)
 			xstrcat(rc, ",");
 		xstrcat(rc, "NodeFeatures");
 	}
+	if (debug_flags & DEBUG_FLAG_NVRAM) {
+		if (rc)
+			xstrcat(rc, ",");
+		xstrcat(rc, "NVRAM");
+	}
 	if (debug_flags & DEBUG_FLAG_LICENSE) {
 		if (rc)
 			xstrcat(rc, ",");
@@ -5385,6 +5483,11 @@ extern char * debug_flags2str(uint64_t debug_flags)
 		if (rc)
 			xstrcat(rc, ",");
 		xstrcat(rc, "Triggers");
+	}
+	if (debug_flags & DEBUG_FLAG_WORKFLOWS) {
+		if (rc)
+			xstrcat(rc, ",");
+		xstrcat(rc, "Workflows");
 	}
 
 	return rc;
@@ -5480,6 +5583,8 @@ extern int debug_str2flags(char *debug_flags, uint64_t *flags_out)
 			(*flags_out) |= DEBUG_FLAG_NO_CONF_HASH;
 		else if (xstrcasecmp(tok, "NodeFeatures") == 0)
 			(*flags_out) |= DEBUG_FLAG_NODE_FEATURES;
+		else if (xstrcasecmp(tok, "NVRAM") == 0)
+			(*flags_out) |= DEBUG_FLAG_NVRAM;
 		else if (xstrcasecmp(tok, "NoRealTime") == 0)
 			(*flags_out) |= DEBUG_FLAG_NO_REALTIME;
 		else if (xstrcasecmp(tok, "Priority") == 0)
@@ -5512,6 +5617,8 @@ extern int debug_str2flags(char *debug_flags, uint64_t *flags_out)
 			(*flags_out) |= DEBUG_FLAG_POWER;
 		else if (xstrcasecmp(tok, "TimeCray") == 0)
 			(*flags_out) |= DEBUG_FLAG_TIME_CRAY;
+		else if (xstrcasecmp(tok, "Workflows") == 0)
+			(*flags_out) |= DEBUG_FLAG_WORKFLOWS;
 		else {
 			error("Invalid DebugFlag: %s", tok);
 			(*flags_out) = 0;

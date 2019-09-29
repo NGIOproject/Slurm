@@ -678,6 +678,11 @@ extern struct node_record *create_node_record (
 	node_ptr->mcs_label = NULL;
 	node_ptr->next_state = NO_VAL;
 	node_ptr->protocol_version = SLURM_MIN_PROTOCOL_VERSION;
+	node_ptr->has_nvram = NO_VAL16;					// NEXTGenIO
+	node_ptr->nvram_capacity = NO_VAL;				// NEXTGenIO
+	node_ptr->nvram_memory_capacity = NO_VAL;		// NEXTGenIO
+	node_ptr->nvram_appdirect_capacity = NO_VAL;	// NEXTGenIO
+	node_ptr->nvram_number_of_namespaces = NO_VAL16;// NEXTGenIO
 	xassert (node_ptr->magic = NODE_MAGIC)  /* set value */;
 	return node_ptr;
 }

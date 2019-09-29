@@ -369,7 +369,9 @@ sacct [<OPTION>]                                                            \n \
                              reqcpufreqmax,reqcpufreqgov,consumedenergy,    \n\
                              maxdiskread,maxdiskreadnode,maxdiskreadtask,   \n\
                              avediskread,maxdiskwrite,maxdiskwritenode,     \n\
-                             maxdiskwritetask,avediskread,allocgres,reqgres \n\
+                             maxdiskwritetask,avediskread,allocgres,reqgres,\n\
+                             workflowsid,workflowsprior,workflowspost,      \n\
+                             workflowsstart,workflowsend                    \n\
      -L, --allclusters:                                                     \n\
 	           Display jobs ran on all clusters. By default, only jobs  \n\
                    ran on the cluster from where sacct is called are        \n\
@@ -423,6 +425,7 @@ sacct [<OPTION>]                                                            \n \
 	           Primarily for debugging purposes, report the state of    \n\
                    various variables during processing.                     \n\
      -V, --version: Print version.                                          \n\
+     -w          : Use this to provide a WorkflowID to select jobs          \n\
      -W, --wckeys:                                                          \n\
                    Only send data about these wckeys.  Default is all.      \n\
      --whole-hetjob=[yes|no]:                                               \n\
@@ -584,7 +587,6 @@ extern int get_data(void)
 
 	itr = list_iterator_create(jobs);
 	while ((job = list_next(itr))) {
-
 		if (job->user) {
 			struct passwd *pw = NULL;
 			if ((pw=getpwnam(job->user)))
@@ -697,6 +699,7 @@ extern void parse_command_line(int argc, char **argv)
                 {"version",        no_argument,       0,    'V'},
                 {"wckeys",         required_argument, 0,    'W'},
                 {"whole-hetjob",   optional_argument, 0,    OPT_LONG_WHETJOB},
+				{"workflows",      optional_argument, 0,    'w'},
                 {"associations",   required_argument, 0,    'x'},
                 {0,                0,		      0,    0}};
 
@@ -718,7 +721,7 @@ extern void parse_command_line(int argc, char **argv)
 
 	while (1) {		/* now cycle through the command line */
 		c = getopt_long(argc, argv,
-				"aA:bcC:DeE:f:g:hi:I:j:k:K:lLM:nN:o:pPq:r:s:S:Ttu:UvVW:x:X",
+				"aA:bcC:DeE:f:g:hi:I:j:k:K:lLM:nN:o:pPq:r:s:S:Ttu:UvVW:w:x:X",
 				long_options, &optionIndex);
 		if (c == -1)
 			break;
@@ -942,6 +945,12 @@ extern void parse_command_line(int argc, char **argv)
 			/* Handle -vvv thusly...
 			 */
 			verbosity++;
+			break;
+		case 'w':
+			if (!job_cond->workflow_list)
+				job_cond->workflow_list =
+					list_create(slurm_destroy_char);
+			slurm_addto_char_list(job_cond->workflow_list, optarg);
 			break;
 		case 'W':
 			if (!job_cond->wckey_list)
@@ -1241,6 +1250,16 @@ extern void parse_command_line(int argc, char **argv)
 	if (job_cond->jobname_list && list_count(job_cond->jobname_list)) {
 		debug2("Jobnames requested:");
 		itr = list_iterator_create(job_cond->jobname_list);
+		while ((start = list_next(itr))) {
+			debug2("\t: %s", start);
+		}
+		list_iterator_destroy(itr);
+	}
+
+	/* specific workflowID requested? */
+	if (job_cond->workflow_list && list_count(job_cond->workflow_list)) {
+		debug2("WorkflowID requested:");
+		itr = list_iterator_create(job_cond->workflow_list);
 		while ((start = list_next(itr))) {
 			debug2("\t: %s", start);
 		}

@@ -338,6 +338,14 @@ extern int slurm_step_launch(slurm_step_ctx_t *ctx,
 
 	launch.select_jobinfo  = ctx->step_resp->select_jobinfo;
 
+	// NEXTGenIO
+	launch.filesystem_device     = params->filesystem_device;
+	launch.filesystem_type       = params->filesystem_type;
+	launch.filesystem_mountpoint = params->filesystem_mountpoint;
+	launch.filesystem_size       = params->filesystem_size;
+	launch.service_type          = params->service_type;
+	launch.optimise_for_energy   = params->optimise_for_energy;
+
 	if (params->user_managed_io)
 		launch.flags	|= LAUNCH_USER_MANAGED_IO;
 	ctx->launch_state->user_managed_io = params->user_managed_io;
@@ -529,6 +537,14 @@ extern int slurm_step_launch_add(slurm_step_ctx_t *ctx,
 	launch.global_task_ids = ctx->step_resp->step_layout->tids;
 
 	launch.select_jobinfo  = ctx->step_resp->select_jobinfo;
+
+	// NEXTGenIO
+	launch.filesystem_device     = params->filesystem_device;
+	launch.filesystem_type       = params->filesystem_type;
+	launch.filesystem_mountpoint = params->filesystem_mountpoint;
+	launch.filesystem_size       = params->filesystem_size;
+	launch.service_type          = params->service_type;
+	launch.optimise_for_energy   = params->optimise_for_energy;
 
 	if (params->user_managed_io)
 		launch.flags |= LAUNCH_USER_MANAGED_IO;

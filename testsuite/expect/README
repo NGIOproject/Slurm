@@ -811,3 +811,16 @@ test38.14  Test pack job step output file labling and different commands/args
 test38.15  Test for proper handling of different rank end times
 test38.16  Test environment variables needed by MPI
 test38.17  Test for multiple, out of order srun --pack-group options
+
+
+test99.#   NEXTGenIO tests
+==========================
+test99.1   Validate NEXTGenIO version.
+test99.2   Validate basic workflow commands.
+test99.3   Validate advanced workflow commands (sbatch).
+test99.4   Validate advanced workflow commands (srun).
+test99.5   Valicate cancelling workflow jobs.
+test99.6   Validate filesystems (sbatch).
+test99.7   Validate filesystems (srun).
+
+

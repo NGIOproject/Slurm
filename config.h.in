@@ -562,14 +562,29 @@
 /* Define the project's minor version. */
 #undef SLURM_MINOR
 
+/* Define the project's major version (NEXTGenIO). */
+#undef SLURM_MAJOR_NEXTGenIO
+
+/* Define the project's micro version (NEXTGenIO). */
+#undef SLURM_MICRO_NEXTGenIO
+
+/* Define the project's minor version (NEXTGenIO). */
+#undef SLURM_MINOR_NEXTGenIO
+
 /* Define Slurm installation prefix */
 #undef SLURM_PREFIX
 
 /* Slurm Version Number */
 #undef SLURM_VERSION_NUMBER
 
+/* SLURM Version Number NEXTGenIO */
+#undef SLURM_VERSION_NUMBER_NEXTGenIO
+
 /* Define the project's version string. */
 #undef SLURM_VERSION_STRING
+
+/* Define the project's version string NEXTGenIO. */
+#undef SLURM_VERSION_STRING_NEXTGenIO
 
 /* Define to 1 if you have the ANSI C header files. */
 #undef STDC_HEADERS
@@ -594,6 +609,9 @@
 
 /* Define the project's version. */
 #undef VERSION
+
+/* Define the project's version NEXTGenIO. */
+#undef VERSION_NEXTGenIO
 
 /* Using internal Slurm X11 support */
 #undef WITH_SLURM_X11

@@ -72,7 +72,7 @@ char *job_req_inx[] = {
 	"t1.pack_job_offset",
 	"t1.id_qos",
 	"t1.id_resv",
-	"t3.resv_name",
+	"t4.resv_name",
 	"t1.id_user",
 	"t1.id_wckey",
 	"t1.job_db_inx",
@@ -103,7 +103,12 @@ char *job_req_inx[] = {
 	"t1.mcs_label",
 	"t2.acct",
 	"t2.lft",
-	"t2.user"
+	"t2.user",
+	"t3.id_workflows",
+	"t3.workflow_prior",
+	"t3.workflow_post",
+	"t3.workflow_start",
+	"t3.workflow_end"
 };
 
 enum {
@@ -157,6 +162,11 @@ enum {
 	JOB_REQ_ACCOUNT,
 	JOB_REQ_LFT,
 	JOB_REQ_USER_NAME,
+	JOB_REQ_WORKFLOWS_ID,
+	JOB_REQ_WORKFLOWS_PRIOR,
+	JOB_REQ_WORKFLOWS_POST,
+	JOB_REQ_WORKFLOWS_START,
+	JOB_REQ_WORKFLOWS_END,
 	JOB_REQ_COUNT
 };
 
@@ -547,18 +557,21 @@ static int _cluster_get_jobs(mysql_conn_t *mysql_conn,
 	query = xstrdup_printf("select %s from \"%s_%s\" as t1 "
 			       "left join \"%s_%s\" as t2 "
 			       "on t1.id_assoc=t2.id_assoc "
-			       "left join \"%s_%s\" as t3 "
-			       "on t1.id_resv=t3.id_resv && "
+				   "left join \"%s_%s\" as t3 "
+			       "on t1.id_job=t3.id_job "
+			       "left join \"%s_%s\" as t4 "
+			       "on t1.id_resv=t4.id_resv && "
 			       "((t1.time_start && "
-			       "(t3.time_start < t1.time_start && "
-			       "(t3.time_end >= t1.time_start || "
-			       "t3.time_end = 0))) || "
-			       "((t3.time_start < t1.time_submit && "
-			       "(t3.time_end >= t1.time_submit || "
-			       "t3.time_end = 0)) || "
-			       "(t3.time_start > t1.time_submit)))",
+			       "(t4.time_start < t1.time_start && "
+			       "(t4.time_end >= t1.time_start || "
+			       "t4.time_end = 0))) || "
+			       "((t4.time_start < t1.time_submit && "
+			       "(t4.time_end >= t1.time_submit || "
+			       "t4.time_end = 0)) || "
+			       "(t4.time_start > t1.time_submit)))",
 			       job_fields, cluster_name, job_table,
 			       cluster_name, assoc_table,
+				   cluster_name, workflow_table,
 			       cluster_name, resv_table);
 
 	if (job_cond->flags & JOBCOND_FLAG_RUNAWAY) {
@@ -836,6 +849,22 @@ static int _cluster_get_jobs(mysql_conn_t *mysql_conn,
 			job->tres_alloc_str = xstrdup(row[JOB_REQ_TRESA]);
 		if (row[JOB_REQ_TRESR])
 			job->tres_req_str = xstrdup(row[JOB_REQ_TRESR]);
+
+		/* NEXTGenIO */
+		if (row[JOB_REQ_WORKFLOWS_ID])
+			job->workflow_id = slurm_atoul(row[JOB_REQ_WORKFLOWS_ID]);
+
+		if (row[JOB_REQ_WORKFLOWS_PRIOR])
+			job->workflow_prior = xstrdup(row[JOB_REQ_WORKFLOWS_PRIOR]);
+
+		if (row[JOB_REQ_WORKFLOWS_POST])
+			job->workflow_post = xstrdup(row[JOB_REQ_WORKFLOWS_POST]);
+
+		if (row[JOB_REQ_WORKFLOWS_START])
+			job->workflow_start = slurm_atoul(row[JOB_REQ_WORKFLOWS_START]);
+
+		if (row[JOB_REQ_WORKFLOWS_END])
+			job->workflow_end = slurm_atoul(row[JOB_REQ_WORKFLOWS_END]);
 
 		if (only_pending ||
 		    (job_cond &&
@@ -1637,6 +1666,25 @@ extern int setup_job_cond_limits(slurmdb_job_cond_t *job_cond,
 		list_iterator_destroy(itr);
 		xstrcat(*extra, ")");
 	}
+
+	if (job_cond->workflow_list && list_count(job_cond->workflow_list)) {
+		set = 0;
+		if (*extra)
+			xstrcat(*extra, " && (");
+		else
+			xstrcat(*extra, " where (");
+
+		itr = list_iterator_create(job_cond->workflow_list);
+		while ((object = list_next(itr))) {
+			if (set)
+				xstrcat(*extra, " || ");
+			xstrfmtcat(*extra, "t3.id_workflows='%s'", object);
+			set = 1;
+		}
+		list_iterator_destroy(itr);
+		xstrcat(*extra, ")");
+	}
+
 	return set;
 }
 

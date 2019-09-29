@@ -136,6 +136,7 @@ char *wckey_day_table = "wckey_usage_day_table";
 char *wckey_hour_table = "wckey_usage_hour_table";
 char *wckey_month_table = "wckey_usage_month_table";
 char *wckey_table = "wckey_table";
+char *workflow_table = "workflow_table";
 
 char *event_view = "event_view";
 char *event_ext_view = "event_ext_view";
@@ -1396,6 +1397,17 @@ extern int create_cluster_tables(mysql_conn_t *mysql_conn, char *cluster_name)
 		{ NULL, NULL}
 	};
 
+	storage_field_t workflow_table_fields[] = {
+		{ "workflow_db_inx", "bigint unsigned not null auto_increment" },
+		{ "id_workflows", "int unsigned not null" },
+		{ "id_job", "int unsigned not null" },
+		{ "workflow_start", "tinyint not null" },
+		{ "workflow_prior", "text" },
+		{ "workflow_post", "text" },
+		{ "workflow_end", "tinyint not null" },
+		{ NULL, NULL}
+	};
+
 	char table_name[200];
 
 	if (create_cluster_assoc_table(mysql_conn, cluster_name)
@@ -1563,6 +1575,17 @@ extern int create_cluster_tables(mysql_conn_t *mysql_conn, char *cluster_name)
 	    == SLURM_ERROR)
 		return SLURM_ERROR;
 
+	snprintf(table_name, sizeof(table_name), "\"%s_%s\"",
+			 cluster_name, workflow_table);
+
+	if (mysql_db_create_table(mysql_conn, table_name,
+					  workflow_table_fields,
+					  ", primary key (workflow_db_inx), "
+					  "key workflows_id_key (id_workflows), "
+					  "key job_id_key (id_job)) ")
+		    == SLURM_ERROR)
+			return SLURM_ERROR;
+
 	return SLURM_SUCCESS;
 }
 
@@ -1594,7 +1617,7 @@ extern int remove_cluster_tables(mysql_conn_t *mysql_conn, char *cluster_name)
 		   "\"%s_%s\", \"%s_%s\", \"%s_%s\", \"%s_%s\", "
 		   "\"%s_%s\", \"%s_%s\", \"%s_%s\", \"%s_%s\", "
 		   "\"%s_%s\", \"%s_%s\", \"%s_%s\", \"%s_%s\", "
-		   "\"%s_%s\", \"%s_%s\";",
+		   "\"%s_%s\", \"%s_%s\", \"%s_%s\";",
 		   cluster_name, assoc_table,
 		   cluster_name, assoc_day_table,
 		   cluster_name, assoc_hour_table,
@@ -1611,7 +1634,8 @@ extern int remove_cluster_tables(mysql_conn_t *mysql_conn, char *cluster_name)
 		   cluster_name, wckey_table,
 		   cluster_name, wckey_day_table,
 		   cluster_name, wckey_hour_table,
-		   cluster_name, wckey_month_table);
+		   cluster_name, wckey_month_table,
+		   cluster_name, workflow_table);
 	/* Since we could possibly add this exact cluster after this
 	   we will require a commit before doing anything else.  This
 	   flag will give us that.

@@ -734,6 +734,10 @@ typedef struct job_step_specs {
 	char *cpus_per_tres;	/* semicolon delimited list of TRES=# values */
 	uint16_t exclusive;	/* 1 if CPUs not shared with other steps */
 	char *features;		/* required node features, default NONE */
+	char *filesystem_device;		/* Device of filesystem to create */	// NEXTGenIO
+	char *filesystem_type;			/* Type of filesystem to create */	// NEXTGenIO
+	char *filesystem_mountpoint;	/* Mountpoint of filesystem */ 		// NEXTGenIO
+	char *filesystem_size;			/* Size of filesystem */ 			// NEXTGenIO
 	char *host;		/* host to contact initiating srun */
 	uint16_t immediate;	/* 1 if allocate to run or fail immediately,
 				 * 0 if to be queued awaiting resources */
@@ -751,6 +755,7 @@ typedef struct job_step_specs {
 	uint8_t no_kill;	/* 1 if no kill on node failure */
 	char *node_list;	/* list of required nodes */
 	uint32_t num_tasks;	/* number of tasks required */
+	uint8_t optimise_for_energy; 	/* optimise for energy */			// NEXTGenIO
 	uint8_t overcommit;     /* flag, 1 to allow overcommit of processors,
 				   0 to disallow overcommit. default is 0 */
 	uint16_t plane_size;	/* plane size when task_dist =
@@ -758,6 +763,7 @@ typedef struct job_step_specs {
 	uint16_t port;		/* port to contact initiating srun */
 	uint16_t relative;	/* first node to use of job's allocation */
 	uint16_t resv_port_cnt;	/* reserve ports for MPI if set */
+	char *service_type;		/* Type of service to start */ // NEXTGenIO
 	uint32_t step_id;	/* Desired step ID or NO_VAL */
 	uint32_t srun_pid;	/* PID of srun command, also see host */
 	uint32_t task_dist;	/* see enum task_dist_state in slurm.h */
@@ -882,6 +888,12 @@ typedef struct launch_tasks_request_msg {
 	char *x11_magic_cookie;		/* X11 auth cookie to abuse */
 	char *x11_target_host;		/* X11 login node to connect back to */
 	uint16_t x11_target_port;	/* X11 target port */
+	char *filesystem_device;		/* Device of filesystem to create */// NEXTGenIO
+	char *filesystem_type;			/* Type of filesystem to create */	// NEXTGenIO
+	char *filesystem_mountpoint;	/* Mountpoint of filesystem */ 		// NEXTGenIO
+	char *filesystem_size;			/* Size of filesystem */ 			// NEXTGenIO
+	char *service_type;				/* Type of service to start */ 		// NEXTGenIO
+	uint8_t optimise_for_energy; 	/* optimise for energy */			// NEXTGenIO
 } launch_tasks_request_msg_t;
 
 typedef struct task_user_managed_io_msg {
@@ -969,6 +981,11 @@ typedef struct kill_job_msg {
 	time_t   start_time;	/* time of job start, track job requeue */
 	uint32_t step_id;
 	time_t   time;		/* slurmctld's time of request */
+	char *filesystem_device;		/* Device of filesystem to create */// NEXTGenIO
+	char *filesystem_type;			/* Type of filesystem to create */	// NEXTGenIO
+	char *filesystem_mountpoint;	/* Mountpoint of filesystem */ 		// NEXTGenIO
+	char *service_type;				/* Type of service to start */ 		// NEXTGenIO
+	uint8_t optimise_for_energy; 	/* optimise for energy */			// NEXTGenIO
 } kill_job_msg_t;
 
 typedef struct job_time_msg {
@@ -1019,6 +1036,12 @@ typedef struct prolog_launch_msg {
 	char *x11_magic_cookie;		/* X11 auth cookie to abuse */
 	char *x11_target_host;		/* X11 login node to connect back to */
 	uint16_t x11_target_port;	/* X11 target port */
+	char *filesystem_device;		/* Device of filesystem to create */// NEXTGenIO
+	char *filesystem_type;			/* Type of filesystem to create */	// NEXTGenIO
+	char *filesystem_mountpoint;	/* Mountpoint of filesystem */ 		// NEXTGenIO
+	char *filesystem_size;			/* Size of filesystem */ 			// NEXTGenIO
+	char *service_type;				/* Type of service to start */ 		// NEXTGenIO
+	uint8_t optimise_for_energy; 	/* optimise for energy */			// NEXTGenIO
 } prolog_launch_msg_t;
 
 typedef struct batch_job_launch_msg {
@@ -1086,6 +1109,12 @@ typedef struct batch_job_launch_msg {
 	char *tres_bind;	/* task binding to TRES (e.g. GPUs),
 				 * included for possible future use */
 	char *tres_freq;	/* frequency/power for TRES (e.g. GPUs) */
+	char *filesystem_device;		/* Device of filesystem to create */// NEXTGenIO
+	char *filesystem_type;			/* Type of filesystem to create */	// NEXTGenIO
+	char *filesystem_mountpoint;	/* Mountpoint of filesystem */ 		// NEXTGenIO
+	char *filesystem_size;			/* Size of filesystem */ 			// NEXTGenIO
+	char *service_type;				/* Type of service to start */ 		// NEXTGenIO
+	uint8_t optimise_for_energy; 	/* optimise for energy */			// NEXTGenIO
 } batch_job_launch_msg_t;
 
 typedef struct job_id_request_msg {
@@ -1254,6 +1283,11 @@ typedef struct slurm_node_registration_status_msg {
 	uint32_t tmp_disk;
 	uint32_t up_time;	/* seconds since reboot */
 	char *version;
+	uint16_t has_nvram;  				/* Is NVRAM present? */			// NEXTGenIO
+	uint32_t nvram_capacity; 			/* Total NVRAM in GBs */ 		// NEXTGenIO
+	uint32_t nvram_memory_capacity; 	/* Memory NVRAM in GBs */ 		// NEXTGenIO
+	uint32_t nvram_appdirect_capacity; 	/* AppDirect NVRAM in GBs */ 	// NEXTGenIO
+	uint16_t nvram_number_of_namespaces;/* Namespaces */				// NEXTGenIO
 } slurm_node_registration_status_msg_t;
 
 typedef struct slurm_node_reg_resp_msg {
@@ -1586,6 +1620,9 @@ extern uint32_t slurm_bb_str2flags(char *bb_str);
 /* Function to convert enforce type flags between strings and numbers */
 extern int parse_part_enforce_type(char *enforce_part_type, uint16_t *param);
 extern char * parse_part_enforce_type_2str (uint16_t type);
+
+/* Function to check MetaScheduler type */ // NEXTGenIO
+extern int parse_metascheduler_type(char *enforce_part_type);
 
 /* Return true if this cluster_name is in a federation */
 extern bool cluster_in_federation(void *ptr, char *cluster_name);

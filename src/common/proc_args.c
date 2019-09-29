@@ -52,6 +52,7 @@
 #include <fcntl.h>
 #include <limits.h>
 #include <pwd.h>		/* getpwuid   */
+#include <uid.h>        /* PW_BUF_SIZE */
 #include <stdarg.h>		/* va_start   */
 #include <stdio.h>
 #include <stdlib.h>		/* getenv, strtoll */
@@ -75,7 +76,7 @@
 /* print this version of Slurm */
 void print_slurm_version(void)
 {
-	printf("%s %s\n", PACKAGE_NAME, SLURM_VERSION_STRING);
+	printf("%s %s %s\n", PACKAGE_NAME, SLURM_VERSION_STRING, SLURM_VERSION_STRING_NEXTGenIO);
 }
 
 /* print the available gres options */
@@ -872,6 +873,483 @@ bool verify_hint(const char *arg, int *min_sockets, int *min_cores,
 	xfree(buf);
 	return 0;
 }
+
+/*
+ * verify that a service type is valid
+ * RET true if valid
+ */
+bool verify_metascheduler_type(const char *arg)
+{
+	bool foundMatch = false;
+
+	if (!arg)
+		return true;
+
+	if (xstrcasecmp(arg, "optimise-for-energy") == 0 ) {
+		debug2("%s: found match %s", __func__, arg);
+		foundMatch = true;
+	} else if (xstrcasecmp(arg, "optimise-for-io") == 0 ) {
+		debug2("%s: found match %s", __func__, arg);
+		foundMatch = true;
+	}
+
+	if ( !foundMatch ) {
+		error("%s: unrecognised MetaScheduler type \"%s\"", __func__, arg);
+		return -1;
+	}
+
+	return 0;
+}
+
+/*
+ * verify that a filesystem device is valid
+ * RET true if valid
+ */
+bool verify_filesystem_device(const char *arg)
+{
+	char *buf, *p, *tok;
+	bool foundMatch = false;
+
+	if (!arg)
+		return true;
+
+	buf = slurm_get_filesystem_devices();
+
+	p = buf;
+	while ((tok = strsep(&p, ","))) {
+		if ((xstrncasecmp(tok, arg, strlen(tok)) == 0) &&
+			(xstrstr(arg, "..")) == NULL ){
+			debug2("verify_filesystem_device: found match %s/%s", tok, arg);
+			foundMatch = true;
+			break;
+		}
+	}
+
+	if ( !foundMatch ) {
+		error("unrecognized filesystem device \"%s\"", arg);
+		xfree(buf);
+		return 1;
+	}
+
+	xfree(buf);
+	return 0;
+}
+
+/*
+ * verify that a filesystem type is valid
+ * RET true if valid
+ */
+bool verify_filesystem_type(const char *arg)
+{
+	char *buf, *p, *tok;
+	bool foundMatch = false;
+
+	if (!arg)
+		return true;
+
+	buf = slurm_get_filesystem_types();
+
+	p = buf;
+	while ((tok = strsep(&p, ","))) {
+		if (xstrcasecmp(tok, arg) == 0) {
+			debug2("verify_filesystem_type: found match %s/%s", tok, arg);
+			foundMatch = true;
+			break;
+		}
+	}
+
+	if ( !foundMatch ) {
+		error("unrecognized filesystem type \"%s\"", arg);
+		xfree(buf);
+		return 1;
+	}
+
+	xfree(buf);
+	return 0;
+}
+
+/*
+ * verify that a filesystem mountpoint is valid
+ * RET true if valid
+ */
+bool verify_filesystem_mountpoint(const char *arg, uid_t uid)
+{
+	char *buf, *p, *tok;
+	bool foundMatch = false;
+	struct passwd pwd, *pwd_ptr = NULL;
+	char pwd_buf[PW_BUF_SIZE];
+
+	if (!arg)
+		return true;
+
+	buf = slurm_get_filesystem_mountpoints();
+
+	p = buf;
+	while ((tok = strsep(&p, ","))) {
+		if ((xstrncasecmp(tok, arg, strlen(tok)) == 0) &&
+			(xstrstr(arg, "..")) == NULL ){
+			debug2("verify_filesystem_mountpoint: found match %s/%s", tok, arg);
+			foundMatch = true;
+			break;
+		}
+	}
+	xfree(buf);
+
+	if (slurm_getpwuid_r(uid, &pwd, pwd_buf, PW_BUF_SIZE, &pwd_ptr)
+		|| (pwd_ptr == NULL)) {
+		error("%s: getpwuid_r(%u):%m", __func__, uid);
+		return 1;
+	}
+
+	// No need to enforce this:
+/*
+	if ( xstrncasecmp(pwd.pw_dir, arg, strlen(pwd.pw_dir)) != 0 ) {
+		error("%s: users (%u / %s) home directory %s is not part of filesystem mountpoint:%s.",
+				__func__, pwd.pw_uid, pwd.pw_name, pwd.pw_dir, arg);
+		return 1;
+	}
+*/
+	if ( !foundMatch ) {
+		error("unrecognized filesystem mountpoint \"%s\"", arg);
+		return 1;
+	}
+
+	return 0;
+}
+
+/*
+ * verify that a filesystem size is valid
+ * RET true if valid
+ */
+bool verify_filesystem_size(const char *arg)
+{
+	char *buf, *p, *tok;
+	bool foundMatch = false;
+
+	if (!arg)
+		return true;
+
+	buf = slurm_get_filesystem_sizes();
+
+	p = buf;
+	while ((tok = strsep(&p, ","))) {
+		if (xstrcasecmp(tok, arg) == 0) {
+			debug2("verify_filesystem_size: found match %s/%s", tok, arg);
+			foundMatch = true;
+			break;
+		}
+	}
+
+	if ( !foundMatch ) {
+		error("unrecognized filesystem size \"%s\"", arg);
+		xfree(buf);
+		return 1;
+	}
+
+	xfree(buf);
+	return 0;
+}
+
+/*
+ * verify that a service type is valid
+ * RET true if valid
+ */
+bool verify_service_type(const char *arg)
+{
+	char *buf, *p, *tok;
+	bool foundMatch = false;
+
+	if (!arg)
+		return true;
+
+	buf = slurm_get_service_types();
+
+	p = buf;
+	while ((tok = strsep(&p, ","))) {
+		if (xstrcasecmp(tok, arg) == 0) {
+			debug2("verify_service_type: found match %s/%s", tok, arg);
+			foundMatch = true;
+			break;
+		}
+	}
+
+	if ( !foundMatch ) {
+		error("unrecognized service type \"%s\"", arg);
+		xfree(buf);
+		return 1;
+	}
+
+	xfree(buf);
+	return 0;
+}
+
+
+/*
+ * verify that the NVRAM options are valid
+ * RET true if valid
+ */
+bool verify_nvram_options(const char *arg, uint16_t *nvram_mode, uint32_t *nvram_size)
+{
+	char *buf, *p, *tok;
+	short int pass = 0;
+
+	if (!arg)
+		return true;
+
+	buf = xstrdup(arg);
+
+	p = buf;
+	while ((tok = strsep(&p, ":"))) {
+		if (xstrcasecmp(tok, "help") == 0) {
+			printf(
+"NVRAM options:\n"
+"    --nvram-options=mode:size   Ask for a specific mode and size (in GBs)\n"
+"        mode: 1LM | 2LM \n"
+"        size in GBs\n"
+"        help            show this help message\n");
+			xfree(buf);
+			return 1;
+		} else if ( (xstrcasecmp(tok, "1LM") == 0) && ( pass == 0) ) {
+			pass = 1;
+			*nvram_mode = 1;
+		} else if ( (xstrcasecmp(tok, "2LM") == 0) && ( pass == 0) ) {
+			pass = 1;
+			*nvram_mode   = 2;
+		} else {
+			if ( pass == 1 ) {
+				char *pp = NULL;
+				int temp_val = strtol(tok, &pp, 10); //parse_int("NVRAM Mem", tok, true);
+				if ((pp == NULL) || (pp[0] != '\0') || (temp_val <= 0) ) {
+						error ("Invalid numeric value \"%s\" for NVRAM Size, see --nvram=help", tok);
+						xfree(buf);
+						return 1;
+				}
+				if ( temp_val <= 1 || temp_val > 4000 ) {
+					error("Invalid size fo rNVRAM Size \"%s\", "
+						      "see --nvram=help", tok);
+					xfree(buf);
+					return 1;
+				}
+				pass = 2;
+				*nvram_size = temp_val;
+				break;
+			}
+			error("unrecognized --nvram-options argument \"%s\", "
+			      "see --nvram=help", tok);
+			xfree(buf);
+			return 1;
+		}
+	}
+
+	xfree(buf);
+	return 0;
+}
+
+#if HAVE_JSON
+// NEXTGenIO
+bool _json_parse_complex(json_object *jobj, char *key, int *num)
+{
+    int json_return = -1;
+    json_object *temp_obj, *value;
+
+    json_return=json_object_object_get_ex(jobj, key, &temp_obj);
+    if ( json_return != 1 ) {
+		error("%s: NULL value for key:%s.\n", __func__, key);
+		return 1;
+    }
+
+    json_return=json_object_object_get_ex(temp_obj, "max", &value);
+    if ( json_return != 1 ) {
+    	error("%s: NULL value for key:max.\n", __func__);
+		return 1;
+    }
+
+    const char *temp_val = json_object_get_string(value);
+    if ( temp_val == NULL ) {
+    	error("%s: Zero length value for key:%s.\n", __func__, key);
+		return 1;
+    }
+
+    *num = atoi(temp_val);
+
+	return 0;
+}
+
+// NEXTGenIO
+bool _json_parse_simple(json_object *jobj, char *key, int *num)
+{
+	int json_return = -1;
+    json_object *temp_obj;
+
+    json_return=json_object_object_get_ex(jobj, key, &temp_obj);
+    if ( json_return != 1 ) {
+    	error("%s: NULL value for key:%s.\n", __func__, key);
+    	return 1;
+    }
+
+    const char *temp_val = json_object_get_string(temp_obj);
+    if ( temp_val == NULL ) {
+    	error("%s: Zero length value for key:%s.\n", __func__, key);
+		return 1;
+    }
+
+	*num = atoi(temp_val);
+
+	return 0;
+}
+
+// NEXTGenIO
+bool verify_map_json(const char *arg, int *min_sockets,
+		int *min_cores, int *min_threads, int *ntasks_per_core, char **hint_type, cpu_bind_type_t *cpu_bind_type)
+{
+
+	if (*hint_type != NULL) {
+		debug("%s: Hint has been set:%s", __func__, *hint_type);
+		return 0;
+	}
+
+	json_object *j_obj;
+	json_object *info_results, *metrics_results;
+	int json_return = -1, parse_return = -1;
+	int number_of_nodes = -1, number_of_processes = -1;
+	int num_omp_threads_per_process = -1, num_cores_per_node = -1;
+
+	FILE* fp;
+	char* buffer;
+	long  fsize;
+
+	/* Open the file */
+	fp = fopen (arg, "r");
+	if (fp == NULL) {
+		error("%s: Could not open file.", __func__);
+		xfree(buffer);
+		return 1;
+	}
+
+	/* Get the size of the file */
+	fseek (fp, 0, SEEK_END);
+	fsize = ftell (fp) + 1;
+	fseek (fp, 0, SEEK_SET);
+	if ( fsize <= 5 ) {
+		error("%s: File size is too small.", __func__);
+		return 1;
+	}
+
+	/* Allocate the buffer */
+	buffer = xmalloc(fsize * sizeof (char));
+	if (buffer == NULL) {
+		error("%s: Could not allocate buffer.", __func__);
+		return 1;
+	}
+
+	/* Read the file */
+	fread (buffer, sizeof (char), fsize, fp);
+
+	/* Close the file */
+	fclose (fp);
+
+	j_obj = json_tokener_parse(buffer);
+	if (j_obj == NULL) {
+		error("%s: json parser failed.", __func__);
+		xfree(buffer);
+		return 1;
+	}
+
+	json_return = json_object_object_get_ex(j_obj, "info", &info_results);
+	if ( json_return != 1 ) {
+		error("%s: json parser failed: info does not exist.", __func__);
+		xfree(buffer);
+		return 1;
+	}
+
+	parse_return = _json_parse_simple(info_results, "number_of_nodes", &number_of_nodes);
+	if ( parse_return != 0 ) {
+		error("%s: json parser failed: number_of_nodes does not exist.", __func__);
+		xfree(buffer);
+		return 1;
+	}
+	debug3("%s: number_of_nodes:%d.", __func__, number_of_nodes);
+	parse_return = _json_parse_simple(info_results, "number_of_processes", &number_of_processes);
+	if ( parse_return != 0 ) {
+		error("%s: json parser failed: number_of_processes does not exist.", __func__);
+		xfree(buffer);
+		return 1;
+	}
+	debug3("%s: number_of_processes:%d.", __func__, number_of_processes);
+	*min_cores = number_of_processes;
+
+
+	json_return=json_object_object_get_ex(info_results,"metrics",&metrics_results);
+	if ( json_return != 1 ) {
+		error("%s: json parser failed: metrics does not exist.", __func__);
+		xfree(buffer);
+		return 1;
+	}
+
+	parse_return = _json_parse_complex(metrics_results, "num_omp_threads_per_process", &num_omp_threads_per_process);
+	if ( parse_return != 0 ) {
+		error("%s: json parser failed: num_omp_threads_per_process does not exist.", __func__);
+		xfree(buffer);
+		return 1;
+	}
+	debug3("%s: num_omp_threads_per_process:%d.", __func__, num_omp_threads_per_process);
+	if ( num_omp_threads_per_process == 1 ) {
+		debug3("%s: Setting hint to nomultithread.", __func__);
+		*min_threads = 1;
+		if (cpu_bind_type) {
+			*cpu_bind_type |= CPU_BIND_TO_THREADS;
+			*cpu_bind_type |= CPU_BIND_ONE_THREAD_PER_CORE;
+		}
+	} else {
+		debug3("%s: Setting hint to multithread.", __func__);
+		*min_threads = NO_VAL;
+		if (cpu_bind_type) {
+			*cpu_bind_type |= CPU_BIND_TO_THREADS;
+			*cpu_bind_type &=
+					(~CPU_BIND_ONE_THREAD_PER_CORE);
+		}
+		if (*ntasks_per_core == NO_VAL)
+			*ntasks_per_core = INFINITE;
+	}
+
+	parse_return = _json_parse_complex(metrics_results, "num_cores_per_node", &num_cores_per_node);
+	if ( parse_return != 0 ) {
+		error("%s: json parser failed: num_cores_per_node does not exist.", __func__);
+		xfree(buffer);
+		return 1;
+	}
+	debug3("%s: num_cores_per_node:%d.", __func__, num_cores_per_node);
+	if ( num_cores_per_node >= 30 ) {
+		debug3("%s: Setting hint to compute_bound.", __func__);
+		*hint_type      = xstrdup("compute_bound");
+		*min_sockets = NO_VAL;
+		*min_cores   = NO_VAL;
+		*min_threads = 1;
+		if (cpu_bind_type)
+			*cpu_bind_type |= CPU_BIND_TO_CORES;
+	} else {
+		debug3("%s: Setting hint to memory_bound.", __func__);
+		*hint_type      = xstrdup("memory_bound");
+		*min_cores   = 1;
+		*min_threads = 1;
+		if (cpu_bind_type)
+			*cpu_bind_type |= CPU_BIND_TO_CORES;
+	}
+
+	json_object_put(j_obj);	/* Frees json memory */
+	xfree(buffer);
+
+	return 0;
+}
+#else
+bool verify_map_json(const char *arg, int *min_sockets,
+		int *min_cores, int *min_threads, int *ntasks_per_core, char **hint_type, cpu_bind_type_t *cpu_bind_type)
+{
+	error("%s: json parsing is not supported.", __func__);
+
+	return 1;
+}
+#endif
 
 uint16_t parse_mail_type(const char *arg)
 {

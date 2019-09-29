@@ -52,6 +52,9 @@ extern List as_mysql_modify_job(mysql_conn_t *mysql_conn, uint32_t uid,
 extern int as_mysql_job_complete(mysql_conn_t *mysql_conn,
 			      struct job_record *job_ptr);
 
+extern int as_mysql_job_complete_workflow(mysql_conn_t *mysql_conn,
+			      struct job_record *job_ptr);
+
 extern int as_mysql_step_start(mysql_conn_t *mysql_conn,
 			    struct step_record *step_ptr);
 

@@ -147,7 +147,7 @@ static int _pick_best_nodes(struct node_set *node_set_ptr,
 			    List *preemptee_job_list, bool has_xand,
 			    bitstr_t *exc_node_bitmap, bool resv_overlap);
 static void _set_err_msg(bool cpus_ok, bool mem_ok, bool disk_ok,
-			 bool job_mc_ok, char **err_msg);
+			 bool job_mc_ok, bool nvram_ok, char **err_msg);
 static void _set_sched_weight(struct node_set *node_set_ptr);
 static int _sort_node_set(const void *x, const void *y);
 static bitstr_t *_valid_features(struct job_record *job_ptr,
@@ -356,6 +356,19 @@ static int _get_gres_config(struct job_record *job_ptr)
 		gres_gresid_to_gresname(gres_count_ids[jx], gres_name,
 					sizeof(gres_name));
 
+		// NEXTGenIO
+		if ( (job_ptr->nvram_mode == 1) || (job_ptr->nvram_mode == 2) ) {
+			if ( xstrcmp("nvram", gres_name) == 0 ) {
+				gres_count_vals[jx] = job_ptr->nvram_mode;
+				debug2("%s: updating gres_count_vals[%d] to nvram_mode:%d",
+					__func__, jx, job_ptr->nvram_mode);
+			}
+			else if ( xstrcmp("nvmem", gres_name) == 0 ) {
+				gres_count_vals[jx] = job_ptr->nvram_size;
+				debug2("%s: updating gres_count_vals[%d] to nvram_size:%d",
+						__func__, jx, job_ptr->nvram_size);
+			}
+		}
 		sprintf(buf,"%s%s:%d", prefix, gres_name, gres_count_vals[jx]);
 		xstrcat(job_ptr->gres_alloc, buf);
 		if (prefix[0] == '\0')
@@ -546,6 +559,11 @@ extern void deallocate_nodes(struct job_record *job_ptr, bool timeout,
 	kill_job->spank_job_env = xduparray(job_ptr->spank_job_env_size,
 					    job_ptr->spank_job_env);
 	kill_job->spank_job_env_size = job_ptr->spank_job_env_size;
+	kill_job->filesystem_type       = xstrdup(job_ptr->filesystem_type);		// NEXTGenIO
+	kill_job->filesystem_mountpoint = xstrdup(job_ptr->filesystem_mountpoint);	// NEXTGenIO
+	kill_job->filesystem_device     = xstrdup(job_ptr->filesystem_device);		// NEXTGenIO
+	kill_job->service_type          = xstrdup(job_ptr->service_type);			// NEXTGenIO
+	kill_job->optimise_for_energy   = job_ptr->optimise_for_energy;				// NEXTGenIO
 
 #ifdef HAVE_FRONT_END
 	if (job_ptr->batch_host &&
@@ -3183,6 +3201,13 @@ extern void launch_prolog(struct job_record *job_ptr)
 	prolog_msg_ptr->spank_job_env_size = job_ptr->spank_job_env_size;
 	prolog_msg_ptr->spank_job_env = xduparray(job_ptr->spank_job_env_size,
 						  job_ptr->spank_job_env);
+	// NEXTGenIO
+	prolog_msg_ptr->filesystem_type       = xstrdup(job_ptr->filesystem_type);
+	prolog_msg_ptr->filesystem_device     = xstrdup(job_ptr->filesystem_device);
+	prolog_msg_ptr->filesystem_mountpoint = xstrdup(job_ptr->filesystem_mountpoint);
+	prolog_msg_ptr->filesystem_size       = xstrdup(job_ptr->filesystem_size);
+	prolog_msg_ptr->service_type          = xstrdup(job_ptr->service_type);
+	prolog_msg_ptr->optimise_for_energy   = job_ptr->optimise_for_energy;
 
 	xassert(job_ptr->job_resrcs);
 	job_resrcs_ptr = job_ptr->job_resrcs;
@@ -3502,6 +3527,17 @@ extern int job_req_node_filter(struct job_record *job_ptr,
 				bit_clear(avail_bitmap, i);
 				continue;
 			}
+			if ( detail_ptr->nvram_mode != NO_VAL16 ) {											// NEXTGenIO
+				debug3("%s: Job requested NVRAM mode:%d and size:%d. Checking node:%s",
+						__func__, detail_ptr->nvram_mode, detail_ptr->nvram_size, node_ptr->name);
+				if ( ((detail_ptr->nvram_mode == 1) && (detail_ptr->nvram_size > node_ptr->nvram_appdirect_capacity)) ||
+					 ((detail_ptr->nvram_mode == 2) && (detail_ptr->nvram_size > node_ptr->nvram_memory_capacity))  ) {
+					debug3("%s: Found a NON match (%s) (Capacity:%d, AppDirect:%d, Memory:%d). Filtering node.",
+							__func__, node_ptr->name, node_ptr->nvram_capacity, node_ptr->nvram_appdirect_capacity, node_ptr->nvram_memory_capacity);
+					bit_clear(avail_bitmap, i);
+					continue;
+				}
+			}
 			if (mc_ptr &&
 			    (((mc_ptr->sockets_per_node > node_ptr->sockets)   &&
 			      (mc_ptr->sockets_per_node != NO_VAL16)) ||
@@ -3696,7 +3732,7 @@ static int _build_node_list(struct job_record *job_ptr,
 	config_iterator = list_iterator_create(config_list);
 	while ((config_ptr = (struct config_record *)
 			list_next(config_iterator))) {
-		bool cpus_ok = false, mem_ok = false, disk_ok = false;
+		bool cpus_ok = false, mem_ok = false, disk_ok = false, nvram_ok = false;
 		bool job_mc_ok = false, config_filter = false;
 		adj_cpus = adjust_cpus_nppcu(_get_ntasks_per_core(detail_ptr),
 					     config_ptr->threads,
@@ -3708,6 +3744,19 @@ static int _build_node_list(struct job_record *job_ptr,
 			mem_ok = true;
 		if (detail_ptr->pn_min_tmp_disk <= config_ptr->tmp_disk)
 			disk_ok = true;
+		if ( detail_ptr->nvram_mode != NO_VAL16 ) {														// NEXTGenIO
+			debug3("%s: Job requested NVRAM mode:%d and size:%d. Checking nodes (%s)",
+					__func__, detail_ptr->nvram_mode, detail_ptr->nvram_size, config_ptr->nodes);
+			if ( ((detail_ptr->nvram_mode == 1) && (detail_ptr->nvram_size < config_ptr->nvram_appdirect_capacity)) ||
+				 ((detail_ptr->nvram_mode == 2) && (detail_ptr->nvram_size < config_ptr->nvram_memory_capacity))  ) {
+					debug3("%s: Found match (%s) (%d) (Capacity:%d, AppDirect:%d, Memory:%d)",
+						__func__, config_ptr->nodes, detail_ptr->nvram_size,
+						config_ptr->nvram_capacity, config_ptr->nvram_appdirect_capacity, config_ptr->nvram_memory_capacity);
+			    	nvram_ok = true;
+			}
+		} else {
+			nvram_ok = true;
+		}
 		if (!mc_ptr)
 			job_mc_ok = true;
 		if (mc_ptr &&
@@ -3718,7 +3767,7 @@ static int _build_node_list(struct job_record *job_ptr,
 		     ((mc_ptr->threads_per_core <= config_ptr->threads) ||
 		      (mc_ptr->threads_per_core == NO_VAL16))))
 			job_mc_ok = true;
-		config_filter = !(cpus_ok && mem_ok && disk_ok && job_mc_ok);
+		config_filter = !(cpus_ok && mem_ok && disk_ok && job_mc_ok && nvram_ok);
 
 		/*
 		 * since nodes can register with more resources than defined
@@ -3728,7 +3777,7 @@ static int _build_node_list(struct job_record *job_ptr,
 		if (slurmctld_conf.fast_schedule) {
 			if (config_filter) {
 				_set_err_msg(cpus_ok, mem_ok, disk_ok,
-					     job_mc_ok, err_msg);
+					     job_mc_ok, nvram_ok, err_msg);
 				continue;
 			}
 			check_node_config = 0;
@@ -3780,8 +3829,8 @@ static int _build_node_list(struct job_record *job_ptr,
 		node_set_ptr[node_set_inx].features =
 			xstrdup(config_ptr->feature);
 		node_set_ptr[node_set_inx].feature_bits = tmp_feature;
-		debug2("found %u usable nodes from config containing %s",
-		       node_set_ptr[node_set_inx].node_cnt, config_ptr->nodes);
+		debug2("%s: found %u usable nodes from config containing %s",
+		       __func__, node_set_ptr[node_set_inx].node_cnt, config_ptr->nodes);
 		prev_node_set_ptr = node_set_ptr + node_set_inx;
 		node_set_inx++;
 		if (node_set_inx >= node_set_len) {
@@ -4050,20 +4099,43 @@ end_node_set:
 /*
  * For a given node_set, set a scheduling weight based upon a combination of
  * node_weight (or reboot_weight) and flags (e.g. try to avoid reboot).
- * 0x20000000000 - Requires boot
- * 0x10000000000 - Outside of flex reservation
+ * 0x40000000000 - Requires boot
+ * 0x20000000000 - Outside of flex reservation
+ * 0x1########00 - Node temperature
  * 0x0########00 - Node weight
  * 0x000000000## - Reserved for cons_tres, favor nodes with co-located CPU/GPU
  */
 static void _set_sched_weight(struct node_set *node_set_ptr)
 {
+	int i = 0;
+	struct node_record   *node_ptr = NULL;
+
 	node_set_ptr->sched_weight = node_set_ptr->node_weight << 8;
 	node_set_ptr->sched_weight |= 0xff;
 	if ((node_set_ptr->flags & NODE_SET_REBOOT) ||
 	    (node_set_ptr->flags & NODE_SET_POWER_DN))	/* Boot required */
-		node_set_ptr->sched_weight |= 0x20000000000;
+		node_set_ptr->sched_weight |= 0x40000000000;
 	if (node_set_ptr->flags & NODE_SET_OUTSIDE_FLEX)
-		node_set_ptr->sched_weight |= 0x10000000000;
+		node_set_ptr->sched_weight |= 0x20000000000;
+	// NEXTGenIO : Add current temperature to sched_weight
+	if (xstrcmp(slurmctld_conf.metascheduler, "optimise-for-energy") == 0) {
+		if (slurmctld_conf.fast_schedule != 0) {
+			error("%s: Meta-Scheduler: optimise for energy is not possible because FastSchedule is:%d",
+					__func__, slurmctld_conf.fast_schedule);
+			return;
+		}
+
+		for (i = 0; i < node_record_count; i++) {
+			if (bit_test(node_set_ptr->my_bitmap, i) == 0)
+				continue;
+
+			node_ptr = &node_record_table_ptr[i];
+
+			if ( (node_ptr->ext_sensors->temperature > 0) && (node_ptr->ext_sensors->temperature < 200) ) {
+				node_set_ptr->sched_weight |= (node_ptr->ext_sensors->temperature * 10) << 8;
+			}
+		}
+	}
 }
 
 static int _sort_node_set(const void *x, const void *y)
@@ -4105,7 +4177,7 @@ static void _log_node_set(struct job_record *job_ptr,
 }
 
 static void _set_err_msg(bool cpus_ok, bool mem_ok, bool disk_ok,
-			 bool job_mc_ok, char **err_msg)
+			 bool job_mc_ok, bool nvram_ok, char **err_msg)
 {
 	if (!err_msg)
 		return;
@@ -4131,6 +4203,11 @@ static void _set_err_msg(bool cpus_ok, bool mem_ok, bool disk_ok,
 				   "can not be satisfied");
 		return;
 	}
+	if (!nvram_ok) {															// NEXTGenIO
+		xfree(*err_msg);
+		*err_msg = xstrdup("NVRAM size requirement can not be satisfied");
+		return;
+	}
 }
 
 /* Remove from the node set any nodes which lack sufficient resources
@@ -4145,7 +4222,7 @@ static void _filter_nodes_in_set(struct node_set *node_set_ptr,
 	if (slurmctld_conf.fast_schedule) {	/* test config records */
 		struct config_record *node_con = NULL;
 		for (i = 0; i < node_record_count; i++) {
-			bool cpus_ok = false, mem_ok = false, disk_ok = false;
+			bool cpus_ok = false, mem_ok = false, disk_ok = false, nvram_ok = false;
 			bool job_mc_ok = false;
 			if (bit_test(node_set_ptr->my_bitmap, i) == 0)
 				continue;
@@ -4163,6 +4240,19 @@ static void _filter_nodes_in_set(struct node_set *node_set_ptr,
 				disk_ok = true;
 			if (!mc_ptr)
 				job_mc_ok = true;
+			if ( job_con->nvram_mode != NO_VAL16 ) {											// NEXTGenIO
+				debug3("%s: Job requested NVRAM mode:%d and size:%d. Checking nodes (%s).",
+						__func__, job_con->nvram_mode, job_con->nvram_size, node_con->nodes);
+//				if ( ((job_con->nvram_mode == 1) && (job_con->nvram_size < node_con->nvram_appdirect_capacity)) ||
+//					 ((job_con->nvram_mode == 2) && (job_con->nvram_size < node_con->nvram_memory_capacity))  ) {
+				if ( job_con->nvram_size < node_con->nvram_capacity ) {
+						debug3("%s: Found match (%s) (Capacity:%d, AppDirect:%d, Memory:%d)",
+								__func__, node_con->nodes, node_con->nvram_capacity, node_con->nvram_appdirect_capacity, node_con->nvram_memory_capacity);
+						nvram_ok = true;
+				}
+			} else {
+				nvram_ok = true;
+			}
 			if (mc_ptr &&
 			    (((mc_ptr->sockets_per_node <= node_con->sockets)  ||
 			      (mc_ptr->sockets_per_node == NO_VAL16)) &&
@@ -4171,10 +4261,10 @@ static void _filter_nodes_in_set(struct node_set *node_set_ptr,
 			     ((mc_ptr->threads_per_core <= node_con->threads)  ||
 			      (mc_ptr->threads_per_core == NO_VAL16))))
 				job_mc_ok = true;
-			if (cpus_ok && mem_ok && disk_ok && job_mc_ok)
+			if (cpus_ok && mem_ok && disk_ok && job_mc_ok && nvram_ok)
 				continue;
 
-			_set_err_msg(cpus_ok, mem_ok, disk_ok, job_mc_ok,
+			_set_err_msg(cpus_ok, mem_ok, disk_ok, job_mc_ok, nvram_ok,
 				     err_msg);
 			bit_clear(node_set_ptr->my_bitmap, i);
 			if ((--(node_set_ptr->node_cnt)) == 0)
@@ -4184,11 +4274,12 @@ static void _filter_nodes_in_set(struct node_set *node_set_ptr,
 	} else {	/* fast_schedule == 0, test individual node records */
 		struct node_record   *node_ptr = NULL;
 		for (i = 0; i < node_record_count; i++) {
-			int job_ok = 0, job_mc_ptr_ok = 0;
+			int job_ok = 0, nvram_ok = 0, job_mc_ptr_ok = 0;
 			if (bit_test(node_set_ptr->my_bitmap, i) == 0)
 				continue;
 
 			node_ptr = &node_record_table_ptr[i];
+
 			adj_cpus = adjust_cpus_nppcu(_get_ntasks_per_core(job_con),
 						     node_ptr->threads,
 						     node_ptr->cpus);
@@ -4205,7 +4296,20 @@ static void _filter_nodes_in_set(struct node_set *node_set_ptr,
 			     ((mc_ptr->threads_per_core <= node_ptr->threads)  ||
 			      (mc_ptr->threads_per_core == NO_VAL16))))
 				job_mc_ptr_ok = 1;
-			if (job_ok && (!mc_ptr || job_mc_ptr_ok))
+			if ( job_con->nvram_mode != NO_VAL16 ) {											// NEXTGenIO
+				debug3("%s: Job requested NVRAM mode:%d and size:%d.  Checking node:%s",
+						__func__, job_con->nvram_mode, job_con->nvram_size, node_ptr->name);
+//				if ( ((job_con->nvram_mode == 1) && (job_con->nvram_size < node_ptr->nvram_appdirect_capacity)) ||
+//					 ((job_con->nvram_mode == 2) && (job_con->nvram_size < node_ptr->nvram_memory_capacity))  ) {
+				if ( job_con->nvram_size < node_ptr->nvram_capacity ) {
+					debug3("%s: Found match (%s) (Capacity:%d, AppDirect:%d, Memory:%d)",
+							__func__, node_ptr->name, node_ptr->nvram_capacity, node_ptr->nvram_appdirect_capacity, node_ptr->nvram_memory_capacity);
+					nvram_ok = 1;
+				}
+			} else {
+				nvram_ok = 1;
+			}
+			if (job_ok && nvram_ok && (!mc_ptr || job_mc_ptr_ok))
 				continue;
 
 			bit_clear(node_set_ptr->my_bitmap, i);
@@ -4584,6 +4688,11 @@ extern void re_kill_job(struct job_record *job_ptr)
 	kill_job->spank_job_env = xduparray(job_ptr->spank_job_env_size,
 					    job_ptr->spank_job_env);
 	kill_job->spank_job_env_size = job_ptr->spank_job_env_size;
+	kill_job->filesystem_type       = xstrdup(job_ptr->filesystem_type);		// NEXTGenIO
+	kill_job->filesystem_mountpoint = xstrdup(job_ptr->filesystem_mountpoint);	// NEXTGenIO
+	kill_job->filesystem_device     = xstrdup(job_ptr->filesystem_device);		// NEXTGenIO
+	kill_job->service_type          = xstrdup(job_ptr->service_type);			// NEXTGenIO
+	kill_job->optimise_for_energy   = job_ptr->optimise_for_energy;				// NEXTGenIO
 
 	/* On a Cray system this will start the NHC early so it is
 	 * able to gather any information it can from the apparent

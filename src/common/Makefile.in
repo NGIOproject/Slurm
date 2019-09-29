@@ -178,7 +178,7 @@ am_libcommon_la_OBJECTS = assoc_mgr.lo cpu_frequency.lo \
 	slurm_accounting_storage.lo slurm_jobacct_gather.lo \
 	slurm_acct_gather_energy.lo slurm_acct_gather_profile.lo \
 	slurm_acct_gather_interconnect.lo \
-	slurm_acct_gather_filesystem.lo slurm_jobcomp.lo \
+	slurm_acct_gather_filesystem.lo slurm_acct_gather_nvram.lo slurm_jobcomp.lo \
 	slurm_route.lo slurm_time.lo slurm_topology.lo switch.lo \
 	slurm_selecttype_info.lo slurm_resource_info.lo hostlist.lo \
 	slurm_step_layout.lo checkpoint.lo job_resources.lo \
@@ -255,6 +255,7 @@ am__depfiles_remade = ./$(DEPDIR)/assoc_mgr.Plo \
 	./$(DEPDIR)/slurm_acct_gather.Plo \
 	./$(DEPDIR)/slurm_acct_gather_energy.Plo \
 	./$(DEPDIR)/slurm_acct_gather_filesystem.Plo \
+	./$(DEPDIR)/slurm_acct_gather_nvram.Plo \
 	./$(DEPDIR)/slurm_acct_gather_interconnect.Plo \
 	./$(DEPDIR)/slurm_acct_gather_profile.Plo \
 	./$(DEPDIR)/slurm_auth.Plo ./$(DEPDIR)/slurm_cred.Plo \
@@ -672,6 +673,7 @@ libcommon_la_SOURCES = \
 	slurm_acct_gather_profile.c slurm_acct_gather_profile.h \
 	slurm_acct_gather_interconnect.c slurm_acct_gather_interconnect.h \
 	slurm_acct_gather_filesystem.c slurm_acct_gather_filesystem.h \
+	slurm_acct_gather_nvram.c slurm_acct_gather_nvram.h \
 	slurm_jobcomp.c slurm_jobcomp.h	\
 	slurm_opt.h			\
 	slurm_route.c slurm_route.h	\
@@ -731,7 +733,8 @@ libspank_la_SOURCES = \
 	optz.c      optz.h
 
 libcommon_la_LIBADD = $(DL_LIBS)
-libcommon_la_LDFLAGS = $(LIB_LDFLAGS) -module --export-dynamic
+@WITH_JSON_PARSER_FALSE@libcommon_la_LDFLAGS = $(LIB_LDFLAGS) -module --export-dynamic
+@WITH_JSON_PARSER_TRUE@libcommon_la_LDFLAGS = $(LIB_LDFLAGS) $(JSON_LDFLAGS) -module --export-dynamic
 
 # This was made so we could export all symbols from libcommon
 # on multiple platforms
@@ -865,6 +868,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/slurm_acct_gather_filesystem.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/slurm_acct_gather_interconnect.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/slurm_acct_gather_profile.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/slurm_acct_gather_nvram.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/slurm_auth.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/slurm_cred.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/slurm_errno.Plo@am__quote@ # am--include-marker
@@ -1117,6 +1121,7 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/slurm_acct_gather.Plo
 	-rm -f ./$(DEPDIR)/slurm_acct_gather_energy.Plo
 	-rm -f ./$(DEPDIR)/slurm_acct_gather_filesystem.Plo
+	-rm -f ./$(DEPDIR)/slurm_acct_gather_nvram.Plo
 	-rm -f ./$(DEPDIR)/slurm_acct_gather_interconnect.Plo
 	-rm -f ./$(DEPDIR)/slurm_acct_gather_profile.Plo
 	-rm -f ./$(DEPDIR)/slurm_auth.Plo
@@ -1257,6 +1262,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/slurm_acct_gather.Plo
 	-rm -f ./$(DEPDIR)/slurm_acct_gather_energy.Plo
 	-rm -f ./$(DEPDIR)/slurm_acct_gather_filesystem.Plo
+	-rm -f ./$(DEPDIR)/slurm_acct_gather_nvram.Plo
 	-rm -f ./$(DEPDIR)/slurm_acct_gather_interconnect.Plo
 	-rm -f ./$(DEPDIR)/slurm_acct_gather_profile.Plo
 	-rm -f ./$(DEPDIR)/slurm_auth.Plo

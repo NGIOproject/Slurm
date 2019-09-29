@@ -138,6 +138,12 @@ typedef struct sbcast_cred sbcast_cred_t;		/* opaque data type */
 #define SLURM_VERSION_MINOR(a)   (((a) >>  8) & 0xff)
 #define SLURM_VERSION_MICRO(a)    ((a)        & 0xff)
 
+#undef  SLURM_VERSION_NUMBER_NEXTGenIO
+#define SLURM_VERSION_NUM_NEXTGenIO(a,b,c) (((a) << 16) + ((b) << 8) + (c))
+#define SLURM_VERSION_MAJOR_NEXTGenIO(a)   (((a) >> 16) & 0xff)
+#define SLURM_VERSION_MINOR_NEXTGenIO(a)   (((a) >>  8) & 0xff)
+#define SLURM_VERSION_MICRO_NEXTGenIO(a)    ((a)        & 0xff)
+
 /*****************************************************************************\
  *	DEFINITIONS FOR INPUT VALUES
 \*****************************************************************************/
@@ -293,6 +299,7 @@ enum job_state_reason {
 	FAIL_INACTIVE_LIMIT,	/* reached slurm InactiveLimit */
 	FAIL_ACCOUNT,		/* invalid account */
 	FAIL_QOS,	 	/* invalid QOS */
+	FAIL_WORKFLOWS,		/* Fail due to Workflows NEXTGenIO */
 	WAIT_QOS_THRES,	       	/* required QOS threshold has been breached */
 	WAIT_QOS_JOB_LIMIT,	/* QOS job limit reached */
 	WAIT_QOS_RESOURCE_LIMIT,/* QOS resource limit reached */
@@ -524,7 +531,9 @@ enum job_state_reason {
 	WAIT_QOS_MAX_BILLING_PER_ACCT,      /* MaxTRESPerAcct    */
 	WAIT_QOS_MIN_BILLING,               /* MinTRESPerJob     */
 
-	WAIT_RESV_DELETED	      /* Reservation was deleted */
+	WAIT_RESV_DELETED,	      /* Reservation was deleted */
+	WAIT_WORKFLOWS,            /* Wait for other workflow jobs to finish */	// NEXTGenIO
+	WAIT_WORKFLOWS_INVALID
 };
 
 enum job_acct_types {
@@ -670,6 +679,7 @@ enum acct_gather_profile_info {
 #define ACCT_GATHER_PROFILE_TASK    0x00000004
 #define ACCT_GATHER_PROFILE_LUSTRE  0x00000008
 #define ACCT_GATHER_PROFILE_NETWORK 0x00000010
+#define ACCT_GATHER_PROFILE_NVRAM   0x00000020
 #define ACCT_GATHER_PROFILE_ALL     0xffffffff
 
 /* jobacct data types */
@@ -1459,6 +1469,10 @@ typedef struct job_descriptor {	/* For submit, allocate, and update requests */
 				 * default NONE */
 	uint64_t fed_siblings_active; /* Bitmap of active fed sibling ids */
 	uint64_t fed_siblings_viable; /* Bitmap of viable fed sibling ids */
+	char *filesystem_device;	/* Device of filesystem */ 		// NEXTGenIO
+	char *filesystem_type;		/* Type of filesystem to create */	// NEXTGenIO
+	char *filesystem_mountpoint;	/* Mountpoint of filesystem */ 		// NEXTGenIO
+	char *filesystem_size;		/* Size of filesystem */ 		// NEXTGenIO
 	uint32_t group_id;	/* group to assume, if run as root. */
 	uint16_t immediate;	/* 1 if allocate to run or fail immediately,
 				 * 0 if to be queued awaiting resources */
@@ -1567,6 +1581,7 @@ typedef struct job_descriptor {	/* For submit, allocate, and update requests */
 	uint32_t req_switch;    /* Minimum number of switches */
 	dynamic_plugin_data_t *select_jobinfo; /* opaque data type,
 					   * Slurm internal use only */
+	char *service_type;	/* Type of service to start */ // NEXTGenIO
 	char *std_err;		/* pathname of stderr */
 	char *std_in;		/* pathname of stdin */
 	char *std_out;		/* pathname of stdout */
@@ -1578,6 +1593,14 @@ typedef struct job_descriptor {	/* For submit, allocate, and update requests */
 	char *x11_magic_cookie;	/* automatically stolen from submit node */
 				/* no x11_target_host, alloc_node is the same */
 	uint16_t x11_target_port; /* target tcp port, 6000 + the display number */
+	uint32_t workflow_id;		/* workflow ID, default set by Slurm */ // NEXTGenIO
+	uint16_t workflow_start; 	/* Is this the start of a workflow? */ 	// NEXTGenIO
+	char *workflow_prior_dependency;	/* Depends on JOB IDs */  	// NEXTGenIO
+	char *workflow_post_dependency;		/* Dependent JOB IDs */ 	// NEXTGenIO
+	uint16_t workflow_end;		/* Is this the end of a workflow? */ 	// NEXTGenIO
+	uint16_t nvram_mode;	/* NVRAM mode */				// NEXTGenIO		
+	uint32_t nvram_size;	/* NVRAM size */				// NEXTGenIO
+	uint8_t optimise_for_energy; /* optimise for energy */	// NEXTGenIO
 } job_desc_msg_t;
 
 typedef struct job_info {
@@ -1632,6 +1655,10 @@ typedef struct job_info {
 	char *fed_siblings_active_str; /* string of active sibling names */
 	uint64_t fed_siblings_viable;  /* bitmap of viable fed sibling ids */
 	char *fed_siblings_viable_str; /* string of viable sibling names */
+	char *filesystem_device;	/* Device of filesystem */	// NEXTGenIO
+	char *filesystem_type;		/* Filesystem Type */ 		// NEXTGenIO
+	char *filesystem_mountpoint;   	/* Filesystem Mountpoint */ 	// NEXTGenIO
+	char *filesystem_size;		/* Size of filesystem */ 	// NEXTGenIO
 	uint32_t gres_detail_cnt; /* Count of gres_detail_str records,
 				 * one per allocated node */
 	char **gres_detail_str;	/* Details of GRES index alloc per node */
@@ -1685,6 +1712,7 @@ typedef struct job_info {
 	uint16_t restart_cnt;	/* count of job restarts */
 	char *resv_name;	/* reservation name */
 	char *sched_nodes;	/* list of nodes scheduled to be used for job */
+	char *service_type;	/* Service Type */  // NEXTGenIO
 	dynamic_plugin_data_t *select_jobinfo; /* opaque data type,
 						* process using
 						* slurm_get_select_jobinfo()
@@ -1724,6 +1752,14 @@ typedef struct job_info {
 	uint32_t wait4switch;   /* Maximum time to wait for minimum switches */
 	char *wckey;            /* wckey for job */
 	char *work_dir;		/* pathname of working directory */
+	uint32_t workflow_id;		/* workflow ID, default set by Slurm */ // NEXTGenIO
+	uint16_t workflow_start;	/* Is this the start of a workflow? */ 	// NEXTGenIO
+	char *workflow_prior_dependency;	/* Depends on JOB IDs */ 		// NEXTGenIO
+	char *workflow_post_dependency;		/* Dependent JOB IDs */			// NEXTGenIO
+	uint16_t workflow_end;		/* Is this the end of a workflow? */	// NEXTGenIO
+	uint16_t nvram_mode;	/* NVRAM mode */				// NEXTGenIO		
+	uint32_t nvram_size;	/* NVRAM size */				// NEXTGenIO
+	uint8_t optimise_for_energy; /* optimise for energy */	// NEXTGenIO
 } slurm_job_info_t;
 
 typedef struct priority_factors_object {
@@ -1912,6 +1948,10 @@ typedef struct {
 				 * real memory per CPU | MEM_PER_CPU,
 				 * default=0 (use job limit) */
 	char *ckpt_dir;		/* directory to store checkpoint image files */
+	char *filesystem_device;	/* Device of filesystem */ 		// NEXTGenIO
+	char *filesystem_type;		/* Type of filesystem to create */	// NEXTGenIO
+	char *filesystem_mountpoint;	/* Mountpoint of filesystem */ 		// NEXTGenIO
+	char *filesystem_size;		/* Size of filesystem */ 		// NEXTGenIO
 	char *name;		/* name of the job step */
 	char *network;		/* network use spec */
 	uint32_t profile;	/* Level of acct_gather_profile {all | none} */
@@ -1930,6 +1970,7 @@ typedef struct {
 				 * SLURM_DIST_PLANE */
 	uint16_t relative;	/* first node to use of job's allocation */
 	uint16_t resv_port_cnt;	/* reserve ports if set */
+	char *service_type;	/* Type of filesystem to create */	// NEXTGenIO
 	uint32_t step_id;	/* desired step ID or NO_VAL */
 	uint32_t task_count;	/* number of tasks required */
 	uint32_t task_dist;	/* see enum task_dist_state, default
@@ -1944,6 +1985,9 @@ typedef struct {
 	uid_t uid;		/* user ID */
 	uint16_t verbose_level; /* for extra logging decisions in step
 				 * launch api */
+	uint16_t nvram_mode;	/* NVRAM mode */				// NEXTGenIO		
+	uint32_t nvram_size;	/* NVRAM size */				// NEXTGenIO
+	uint8_t optimise_for_energy; /* optimise for energy */	// NEXTGenIO
 } slurm_step_ctx_params_t;
 
 typedef struct {
@@ -2014,6 +2058,12 @@ typedef struct {
 	uint32_t spank_job_env_size;	/* element count in spank_env */
 	char *tres_bind;
 	char *tres_freq;
+	char *filesystem_device;	/* Device of filesystem */ 		// NEXTGenIO
+	char *filesystem_type;		/* Type of filesystem to create */	// NEXTGenIO
+	char *filesystem_mountpoint;	/* Mountpoint of filesystem */ 		// NEXTGenIO
+	char *filesystem_size;		/* Size of filesystem */ 		// NEXTGenIO
+	char *service_type;		/* Type of service to start */		// NEXTGenIO
+	uint8_t optimise_for_energy; /* optimise for energy */		// NEXTGenIO
 } slurm_step_launch_params_t;
 
 typedef struct {
@@ -2051,6 +2101,11 @@ typedef struct {
 	uint32_t cpu_freq_max;	/* Maximum cpu frequency  */
 	uint32_t cpu_freq_gov;	/* cpu frequency governor */
 	char *cpus_per_tres;	/* comma delimited list of TRES=# values */
+	char *filesystem_device;	/* Device of filesystem */ 			// NEXTGenIO
+	char *filesystem_type;		/* Type of filesystem to create */	// NEXTGenIO
+	char *filesystem_mountpoint;	/* Mountpoint of filesystem */ 	// NEXTGenIO
+	char *filesystem_size;		/* Size of filesystem */ 			// NEXTGenIO
+	uint8_t optimise_for_energy; /* optimise for energy */			// NEXTGenIO
 	uint32_t job_id;	/* job ID */
 	char *mem_per_tres;	/* comma delimited list of TRES=# values */
 	char *name;		/* name of job step */
@@ -2068,6 +2123,7 @@ typedef struct {
 						* process using
 						* slurm_get_select_jobinfo()
 						*/
+	char *service_type;	/* Type of service to start*/		// NEXTGenIO
 	char *srun_host;	/* host of srun command */
 	uint32_t srun_pid;	/* PID of srun command */
 	time_t start_time;	/* step start time */
@@ -2171,6 +2227,10 @@ typedef struct node_info {
 	uint32_t weight;	/* arbitrary priority of node for scheduling */
 	char *tres_fmt_str;	/* str representing configured TRES on node */
 	char *version;		 /* Slurm version number */
+	uint32_t nvram_capacity; 		/* Total NVRAM in GBs */ 			// NEXTGenIO
+	uint32_t nvram_memory_capacity; 	/* Memory NVRAM in GBs */ 		// NEXTGenIO
+	uint32_t nvram_appdirect_capacity; 	/* AppDirect NVRAM in GBs */ 	// NEXTGenIO
+	uint16_t nvram_number_of_namespaces;		/* Namespaces */		// NEXTGenIO
 } node_info_t;
 
 typedef struct node_info_msg {
@@ -2588,6 +2648,8 @@ typedef struct reservation_name_msg {
 #define DEBUG_FLAG_NODE_FEATURES 0x0000800000000000 /* Node Features debug */
 #define DEBUG_FLAG_FEDR         0x0001000000000000 /* Federation debug */
 #define DEBUG_FLAG_HETERO_JOBS  0x0002000000000000 /* Heterogeneous job debug */
+#define DEBUG_FLAG_WORKFLOWS    0x0004000000000000 /* NEXTGenIO Workflows debug */
+#define DEBUG_FLAG_NVRAM        0x0008000000000000 /* NEXTGenIO AcctGatherNVRAM plugin */
 
 #define PREEMPT_MODE_OFF	0x0000	/* disable job preemption */
 #define PREEMPT_MODE_SUSPEND	0x0001	/* suspend jobs to preempt */
@@ -2644,6 +2706,7 @@ typedef struct slurm_ctl_conf {
 	char *acct_gather_profile_type; /* profile accounting type */
 	char *acct_gather_interconnect_type; /* interconnect accounting type */
 	char *acct_gather_filesystem_type; /* filesystem accounting type */
+	char *acct_gather_nvram_type; /* NVRAM accounting type */	// NEXTGenIO
 	uint16_t acct_gather_node_freq; /* secs between node acct request */
 	char *authinfo;		/* authentication info */
 	char *authtype;		/* authentication type */
@@ -2681,6 +2744,10 @@ typedef struct slurm_ctl_conf {
 	uint16_t fast_schedule;	/* 1 to *not* check configurations by node
 				 * (only check configuration file, faster) */
 	char *fed_params;       /* Federation parameters */
+	char *filesystem_devices;	/* Device of filesystem */ 	// NEXTGenIO
+	char *filesystem_types;     	/* Filesystem Types */ 		// NEXTGenIO
+	char *filesystem_mountpoints;	/* Filesystem Mountpoints */ 	// NEXTGenIO
+	char *filesystem_sizes;		/* Size of filesystem */ 	// NEXTGenIO
 	uint32_t first_job_id;	/* first slurm generated job_id to assign */
 	uint16_t fs_dampening_factor; /* dampening for Fairshare factor */
 	uint16_t get_env_timeout; /* timeout for srun --get-user-env option */
@@ -2737,6 +2804,7 @@ typedef struct slurm_ctl_conf {
 	char *mcs_plugin; /* mcs plugin type */
 	char *mcs_plugin_params; /* mcs plugin parameters */
 	uint16_t mem_limit_enforce; /* Enforce mem limit at runtime y|n */
+	char *metascheduler;    /* MetaScheduler settings */	// NEXTGenIO
 	uint32_t min_job_age;	/* COMPLETED jobs over this age (secs)
 				 * purged from in memory records */
 	char *mpi_default;	/* Default version of MPI in use */
@@ -2817,6 +2885,7 @@ typedef struct slurm_ctl_conf {
 				      * listed with slurm_print_key_pairs() */
 	uint16_t select_type_param; /* Parameters
 				     * describing the select_type plugin */
+	char *service_types;	/* Service Types */  			// NEXTGenIO
 	char *slurm_conf;	/* pathname of slurm config file */
 	uint32_t slurm_user_id;	/* uid of slurm_user_name */
 	char *slurm_user_name;	/* user that slurmctld runs as */

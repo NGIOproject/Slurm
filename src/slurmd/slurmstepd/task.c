@@ -392,6 +392,7 @@ extern void exec_task(stepd_step_rec_t *job, int i)
 	job->envtp->batch_flag = job->batch;
 	job->envtp->uid = job->uid;
 	job->envtp->user_name = xstrdup(job->user_name);
+	job->envtp->filesystem_mountpoint = xstrdup(job->filesystem_mountpoint);	// NEXTGenIO
 
 	/*
 	 * Modify copy of job's environment. Do not alter in place or

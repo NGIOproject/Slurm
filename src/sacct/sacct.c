@@ -148,6 +148,11 @@ print_field_t fields[] = {
 	{10, "WCKey", print_fields_str, PRINT_WCKEY},
 	{10, "WCKeyID", print_fields_uint, PRINT_WCKEYID},
 	{20, "WorkDir", print_fields_str, PRINT_WORK_DIR},
+	{-12, "WorkflowsID", print_fields_str, PRINT_WORKFLOWSID},
+	{20, "WorkflowsPrior", print_fields_str, PRINT_WORKFLOWSPRIOR},
+	{20, "WorkflowsPost", print_fields_str, PRINT_WORKFLOWSPOST},
+	{10, "WorkflowsStart", print_fields_uint, PRINT_WORKFLOWSSTART},
+	{10, "WorkflowsEnd", print_fields_uint, PRINT_WORKFLOWSEND},
 	{0,  NULL, NULL, 0}};
 
 List jobs = NULL;

@@ -103,6 +103,7 @@ typedef struct sbatch_opt {
 	bool wait;			/* --wait			*/
 	uint16_t wait_all_nodes;	/* --wait-nodes-ready=val	*/
 	char *wrap;
+	char *filesystem_mountpoint;	/* Filesystem mountpoint */		// NEXTGenIO
 } sbatch_opt_t;
 
 /*
@@ -178,6 +179,7 @@ typedef struct srun_opt {
 	bool unbuffered;		/* --unbuffered			*/
 	bool user_managed_io;		/* 0 for "normal" IO,		*/
 					/* 1 for "user manged" IO	*/
+	char *filesystem_mountpoint;	/* Filesystem mountpoint */		// NEXTGenIO
 } srun_opt_t;
 
 typedef struct slurm_options {
@@ -301,6 +303,21 @@ typedef struct slurm_options {
 	char *x11_magic_cookie;		/* cookie retrieved from xauth	*/
 	/* no x11_target_host here, alloc_host will be equivalent */
 	uint16_t x11_target_port;	/* target display TCP port on localhost */
+	uint32_t workflow_id;			/* workflow ID, default set by Slurm */	// NEXTGenIO
+	uint16_t workflow_start;		/* Is this the start of a workflow? */	// NEXTGenIO
+	char *workflow_prior_dependency;	/* Depends on JOB IDs */			// NEXTGenIO
+	char *workflow_post_dependency;		/* Dependent JOB IDs */				// NEXTGenIO
+	uint16_t workflow_end;			/* Is this the end of a workflow? */	// NEXTGenIO
+	char *filesystem_device;		/* Device of filesystem to create */	// NEXTGenIO
+	char *filesystem_type;			/* Type of filesystem to create */		// NEXTGenIO
+	char *filesystem_mountpoint;	/* Mountpoint of filesystem */			// NEXTGenIO
+	char *filesystem_size;			/* Size of filesystem to create */		// NEXTGenIO
+	char *service_type;				/* Type of service to start */			// NEXTGenIO
+	char *nvram_options;			/* NVRAM options */						// NEXTGenIO
+	char *map_json;					/* MAP JSON options */					// NEXTGenIO
+	uint16_t nvram_mode;			/* NVRAM mode */ 						// NEXTGenIO
+	uint32_t nvram_size;			/* NVRAM size */ 						// NEXTGenIO
+	bool optimise_for_energy;		/* Optimise for energy */				// NEXTGenIO
 } slurm_opt_t;
 
 #endif	/* _SLURM_OPT_H_ */

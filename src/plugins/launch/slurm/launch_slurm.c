@@ -781,6 +781,13 @@ extern int launch_p_step_launch(srun_job_t *job, slurm_step_io_fds_t *cio_fds,
 	launch_params.ntasks_per_socket  = job->ntasks_per_socket;
 	launch_params.no_alloc           = srun_opt->no_alloc;
 	launch_params.env = _build_user_env(job, opt_local);
+	// NEXTGenIO
+	launch_params.filesystem_device     = opt_local->filesystem_device;
+	launch_params.filesystem_type       = opt_local->filesystem_type;
+	launch_params.filesystem_mountpoint = opt_local->filesystem_mountpoint;
+	launch_params.filesystem_size       = opt_local->filesystem_size;
+	launch_params.service_type          = opt_local->service_type;
+	launch_params.optimise_for_energy   = opt_local->optimise_for_energy;
 
 	memcpy(&launch_params.local_fds, cio_fds, sizeof(slurm_step_io_fds_t));
 

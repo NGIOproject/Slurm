@@ -246,6 +246,12 @@ typedef struct {
 	char *x11_target_host;		/* remote machine to connect back to */
 	uint16_t x11_target_port;	/* remote x11 port to connect back to */
 	char *x11_xauthority;		/* temporary XAUTHORITY location, or NULL */
+	char *filesystem_device;		/* filesystem device */ 	// NEXTGenIO
+	char *filesystem_type;			/* filesystem type */ 		// NEXTGenIO
+	char *filesystem_mountpoint;	/* filesystem mountpoint */	// NEXTGenIO
+	char *filesystem_size;			/* filesystem size */ 		// NEXTGenIO
+	char *service_type;				/* service type */ 			// NEXTGenIO
+	uint8_t optimise_for_energy; 	/* optimise for energy */	// NEXTGenIO
 } stepd_step_rec_t;
 
 

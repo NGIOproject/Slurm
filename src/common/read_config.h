@@ -94,6 +94,7 @@ extern uint16_t drop_priv_flag;
 #define DEFAULT_ACCT_GATHER_PROFILE_TYPE "acct_gather_profile/none"
 #define DEFAULT_ACCT_GATHER_INTERCONNECT_TYPE "acct_gather_interconnect/none"
 #define DEFAULT_ACCT_GATHER_FILESYSTEM_TYPE "acct_gather_filesystem/none"
+#define DEFAULT_ACCT_GATHER_NVRAM_TYPE "acct_gather_nvram/none"
 #define ACCOUNTING_STORAGE_TYPE_NONE "accounting_storage/none"
 #define DEFAULT_CORE_SPEC_PLUGIN    "core_spec/none"
 #define DEFAULT_DISABLE_ROOT_JOBS   0

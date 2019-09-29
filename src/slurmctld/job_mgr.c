@@ -200,6 +200,7 @@ static int  _job_create(job_desc_msg_t * job_specs, int allocate, int will_run,
 			char **err_msg, uint16_t protocol_version);
 static void _job_timed_out(struct job_record *job_ptr, bool preempted);
 static void _kill_dependent(struct job_record *job_ptr);
+static void _kill_workflow(struct job_record *job_ptr);
 static void _list_delete_job(void *job_entry);
 static int  _list_find_job_old(void *job_entry, void *key);
 static int  _load_job_details(struct job_record *job_ptr, Buf buffer,
@@ -672,6 +673,14 @@ static void _delete_job_details(struct job_record *job_entry)
 	xfree(job_entry->details->work_dir);
 	xfree(job_entry->details->x11_magic_cookie);
 	/* no x11_target_host, it's the same as alloc_node */
+	// NEXTGenIO
+	xfree(job_entry->details->workflow_prior_dependency);
+	xfree(job_entry->details->workflow_post_dependency);
+	xfree(job_entry->details->filesystem_device);
+	xfree(job_entry->details->filesystem_type);
+	xfree(job_entry->details->filesystem_mountpoint);
+	xfree(job_entry->details->filesystem_size);
+	xfree(job_entry->details->service_type);
 	xfree(job_entry->details);	/* Must be last */
 }
 
@@ -1322,6 +1331,21 @@ static void _dump_job_state(struct job_record *dump_job_ptr, Buf buffer)
 	pack16(dump_job_ptr->warn_signal, buffer);
 	pack16(dump_job_ptr->warn_time, buffer);
 
+	/* NEXTGenIO */
+	pack32(dump_job_ptr->workflow_id, buffer);
+	pack16(dump_job_ptr->workflow_start, buffer);
+	packstr(dump_job_ptr->workflow_prior_dependency, buffer);
+	packstr(dump_job_ptr->workflow_post_dependency, buffer);
+	pack16(dump_job_ptr->workflow_end, buffer);
+	packstr(dump_job_ptr->filesystem_device, buffer);
+	packstr(dump_job_ptr->filesystem_type, buffer);
+	packstr(dump_job_ptr->filesystem_mountpoint, buffer);
+	packstr(dump_job_ptr->filesystem_size, buffer);
+	packstr(dump_job_ptr->service_type, buffer);
+	pack8(dump_job_ptr->optimise_for_energy, buffer);
+	pack16(dump_job_ptr->nvram_mode, buffer);
+	pack32(dump_job_ptr->nvram_size, buffer);
+
 	_pack_acct_policy_limit(&dump_job_ptr->limit_set, buffer,
 				SLURM_PROTOCOL_VERSION);
 
@@ -1430,11 +1454,13 @@ static int _load_job_state(Buf buffer, uint16_t protocol_version)
 	time_t preempt_time = 0, deadline = 0;
 	time_t last_sched_eval = 0;
 	time_t resize_time = 0, now = time(NULL);
-	uint8_t reboot = 0, power_flags = 0;
+	uint8_t reboot = 0, power_flags = 0, optimise_for_energy = 0;
 	uint32_t array_task_id = NO_VAL;
 	uint32_t array_flags = 0, max_run_tasks = 0, tot_run_tasks = 0;
 	uint32_t min_exit_code = 0, max_exit_code = 0, tot_comp_tasks = 0;
 	uint32_t pack_job_id = 0, pack_job_offset = 0;
+	uint32_t workflow_id = NO_VAL;
+	uint16_t workflow_start, workflow_end;
 	uint16_t details, batch_flag, step_flag;
 	uint16_t kill_on_node_fail, direct_set_prio;
 	uint16_t alloc_resp_port, other_port, mail_type, state_reason;
@@ -1452,6 +1478,12 @@ static int _load_job_state(Buf buffer, uint16_t protocol_version)
 	char *admin_comment = NULL, *task_id_str = NULL, *mcs_label = NULL;
 	char *clusters = NULL, *pack_job_id_set = NULL, *user_name = NULL;
 	char *batch_features = NULL, *system_comment = NULL;
+	char *workflow_prior_dependency = NULL, *workflow_post_dependency = NULL;
+	char *filesystem_device = NULL, *filesystem_type = NULL;
+	char *filesystem_mountpoint = NULL, *filesystem_size = NULL;
+	char *service_type = NULL;
+	uint16_t nvram_mode = NO_VAL16;
+	uint32_t nvram_size = NO_VAL;
 	uint32_t task_id_size = NO_VAL;
 	char **spank_job_env = (char **) NULL;
 	List gres_list = NULL, part_ptr_list = NULL;
@@ -1567,6 +1599,21 @@ static int _load_job_state(Buf buffer, uint16_t protocol_version)
 		safe_unpack16(&warn_flags, buffer);
 		safe_unpack16(&warn_signal, buffer);
 		safe_unpack16(&warn_time, buffer);
+
+		/* NEXTGenIO */
+		safe_unpack32(&workflow_id, buffer);
+		safe_unpack16(&workflow_start, buffer);
+		safe_unpackstr_xmalloc(&workflow_prior_dependency, &name_len, buffer);
+		safe_unpackstr_xmalloc(&workflow_post_dependency, &name_len, buffer);
+		safe_unpack16(&workflow_end, buffer);
+		safe_unpackstr_xmalloc(&filesystem_device, &name_len, buffer);
+		safe_unpackstr_xmalloc(&filesystem_type, &name_len, buffer);
+		safe_unpackstr_xmalloc(&filesystem_mountpoint, &name_len, buffer);
+		safe_unpackstr_xmalloc(&filesystem_size, &name_len, buffer);
+		safe_unpackstr_xmalloc(&service_type, &name_len, buffer);
+		safe_unpack8(&optimise_for_energy, buffer);
+		safe_unpack16(&nvram_mode, buffer);
+		safe_unpack32(&nvram_size, buffer);
 
 		_unpack_acct_policy_limit_members(&limit_set, buffer,
 						  protocol_version);
@@ -2349,6 +2396,28 @@ static int _load_job_state(Buf buffer, uint16_t protocol_version)
 	job_ptr->warn_signal  = warn_signal;
 	job_ptr->warn_time    = warn_time;
 
+	/* NEXTGenIO */
+	job_ptr->workflow_id	= workflow_id;
+	job_ptr->workflow_start = workflow_start;
+	xfree(job_ptr->workflow_prior_dependency);
+	job_ptr->workflow_prior_dependency = workflow_prior_dependency;
+	xfree(job_ptr->workflow_post_dependency);
+	job_ptr->workflow_post_dependency = workflow_post_dependency;
+	job_ptr->workflow_end = workflow_end;
+	xfree(job_ptr->filesystem_device);
+	job_ptr->filesystem_device = filesystem_device;
+	xfree(job_ptr->filesystem_type);
+	job_ptr->filesystem_type = filesystem_type;
+	xfree(job_ptr->filesystem_mountpoint);
+	job_ptr->filesystem_mountpoint = filesystem_mountpoint;
+	xfree(job_ptr->filesystem_size);
+	job_ptr->filesystem_size = filesystem_size;
+	xfree(job_ptr->service_type);
+	job_ptr->service_type = service_type;
+	job_ptr->optimise_for_energy = optimise_for_energy;
+	job_ptr->nvram_mode	= nvram_mode;
+	job_ptr->nvram_size = nvram_size;
+
 	memcpy(&job_ptr->limit_set, &limit_set,
 	       sizeof(acct_policy_limit_set_t));
 	limit_set.tres = NULL;
@@ -2498,6 +2567,13 @@ unpack_error:
 	xfree(tres_req_str);
 	xfree(user_name);
 	xfree(wckey);
+	xfree(workflow_prior_dependency);
+	xfree(workflow_post_dependency);
+	xfree(filesystem_device);
+	xfree(filesystem_type);
+	xfree(filesystem_mountpoint);
+	xfree(filesystem_size);
+	xfree(service_type);
 	select_g_select_jobinfo_free(select_jobinfo);
 	checkpoint_free_jobinfo(check_job);
 	if (job_ptr) {
@@ -2571,6 +2647,21 @@ void _dump_job_details(struct job_details *detail_ptr, Buf buffer)
 	pack_time(detail_ptr->accrue_time, buffer);
 	pack_time(detail_ptr->submit_time, buffer);
 
+	/* NEXTGenIO */
+	pack32(detail_ptr->workflow_id,                buffer);
+	pack16(detail_ptr->workflow_start,             buffer);
+	packstr(detail_ptr->workflow_prior_dependency, buffer);
+	packstr(detail_ptr->workflow_post_dependency,  buffer);
+	pack16(detail_ptr->workflow_end,               buffer);
+	packstr(detail_ptr->filesystem_device, 		   buffer);
+	packstr(detail_ptr->filesystem_type,  		   buffer);
+	packstr(detail_ptr->filesystem_mountpoint,     buffer);
+	packstr(detail_ptr->filesystem_size,  		   buffer);
+	packstr(detail_ptr->service_type,  			   buffer);
+	pack8(detail_ptr->optimise_for_energy,         buffer);
+	pack16(detail_ptr->nvram_mode,                 buffer);
+	pack32(detail_ptr->nvram_size,                 buffer);
+
 	packstr(detail_ptr->req_nodes,  buffer);
 	packstr(detail_ptr->exc_nodes,  buffer);
 	packstr(detail_ptr->features,   buffer);
@@ -2600,6 +2691,10 @@ static int _load_job_details(struct job_record *job_ptr, Buf buffer,
 	char *orig_dependency = NULL, *mem_bind, *cluster_features = NULL;
 	char *err = NULL, *in = NULL, *out = NULL, *work_dir = NULL;
 	char *ckpt_dir = NULL, *restart_dir = NULL;
+	char *workflow_prior_dependency = NULL, *workflow_post_dependency = NULL;
+	char *filesystem_device = NULL, *filesystem_type = NULL;
+	char *filesystem_mountpoint = NULL, *filesystem_size = NULL;
+	char *service_type = NULL;
 	char **argv = (char **) NULL, **env_sup = (char **) NULL;
 	uint32_t min_nodes, max_nodes;
 	uint32_t min_cpus = 1, max_cpus = NO_VAL;
@@ -2612,8 +2707,12 @@ static int _load_job_details(struct job_record *job_ptr, Buf buffer,
 	uint16_t contiguous, core_spec = NO_VAL16;
 	uint16_t ntasks_per_node, cpus_per_task, requeue;
 	uint16_t cpu_bind_type, mem_bind_type, plane_size;
+	uint32_t workflow_id = NO_VAL;
+	uint16_t workflow_start, workflow_end;
+	uint16_t nvram_mode = NO_VAL16;
+	uint32_t nvram_size = NO_VAL;
 	uint8_t open_mode, overcommit, prolog_running;
-	uint8_t share_res, whole_node;
+	uint8_t share_res, whole_node, optimise_for_energy;
 	time_t begin_time, accrue_time = 0, submit_time;
 	int i;
 	multi_core_data_t *mc_ptr;
@@ -2657,6 +2756,21 @@ static int _load_job_details(struct job_record *job_ptr, Buf buffer,
 		safe_unpack_time(&begin_time, buffer);
 		safe_unpack_time(&accrue_time, buffer);
 		safe_unpack_time(&submit_time, buffer);
+
+		/* NEXTGenIO */
+		safe_unpack32(&workflow_id, buffer);
+		safe_unpack16(&workflow_start, buffer);
+		safe_unpackstr_xmalloc(&workflow_prior_dependency,  &name_len, buffer);
+		safe_unpackstr_xmalloc(&workflow_post_dependency,  &name_len, buffer);
+		safe_unpack16(&workflow_end, buffer);
+		safe_unpackstr_xmalloc(&filesystem_device, 		&name_len, buffer);
+		safe_unpackstr_xmalloc(&filesystem_type,  		&name_len, buffer);
+		safe_unpackstr_xmalloc(&filesystem_mountpoint,  &name_len, buffer);
+		safe_unpackstr_xmalloc(&filesystem_size,  		&name_len, buffer);
+		safe_unpackstr_xmalloc(&service_type,  			&name_len, buffer);
+		safe_unpack8(&optimise_for_energy, buffer);
+		safe_unpack16(&nvram_mode, buffer);
+		safe_unpack32(&nvram_size, buffer);
 
 		safe_unpackstr_xmalloc(&req_nodes,  &name_len, buffer);
 		safe_unpackstr_xmalloc(&exc_nodes,  &name_len, buffer);
@@ -2832,6 +2946,14 @@ static int _load_job_details(struct job_record *job_ptr, Buf buffer,
 	xfree(job_ptr->details->work_dir);
 	xfree(job_ptr->details->ckpt_dir);
 	xfree(job_ptr->details->restart_dir);
+	// NEXTGenIO
+	xfree(job_ptr->details->workflow_prior_dependency);
+	xfree(job_ptr->details->workflow_post_dependency);
+	xfree(job_ptr->details->filesystem_device);
+	xfree(job_ptr->details->filesystem_type);
+	xfree(job_ptr->details->filesystem_mountpoint);
+	xfree(job_ptr->details->filesystem_size);
+	xfree(job_ptr->details->service_type);
 
 	/* now put the details into the job record */
 	job_ptr->details->acctg_freq = acctg_freq;
@@ -2888,6 +3010,20 @@ static int _load_job_details(struct job_record *job_ptr, Buf buffer,
 	job_ptr->details->work_dir = work_dir;
 	job_ptr->details->ckpt_dir = ckpt_dir;
 	job_ptr->details->restart_dir = restart_dir;
+	// NEXTGenIO
+	job_ptr->details->workflow_id = workflow_id;
+	job_ptr->details->workflow_start = workflow_start;
+	job_ptr->details->workflow_prior_dependency = workflow_prior_dependency;
+	job_ptr->details->workflow_post_dependency = workflow_post_dependency;
+	job_ptr->details->workflow_end = workflow_end;
+	job_ptr->details->filesystem_type 		= filesystem_type;
+	job_ptr->details->filesystem_mountpoint = filesystem_mountpoint;
+	job_ptr->details->filesystem_device     = filesystem_device;
+	job_ptr->details->filesystem_size 		= filesystem_size;
+	job_ptr->details->service_type 			= service_type;
+	job_ptr->details->optimise_for_energy	= optimise_for_energy;
+	job_ptr->details->nvram_mode 			= nvram_mode;
+	job_ptr->details->nvram_size 			= nvram_size;
 
 	return SLURM_SUCCESS;
 
@@ -2914,6 +3050,15 @@ unpack_error:
 	xfree(work_dir);
 	xfree(ckpt_dir);
 	xfree(restart_dir);
+	// NEXTGenIO
+	xfree(workflow_prior_dependency);
+	xfree(workflow_post_dependency);
+	xfree(filesystem_device);
+	xfree(filesystem_type);
+	xfree(filesystem_mountpoint);
+	xfree(filesystem_size);
+	xfree(service_type);
+
 	return SLURM_FAILURE;
 }
 
@@ -4356,6 +4501,17 @@ void dump_job_desc(job_desc_msg_t * job_specs)
 	if (job_specs->tres_per_task)
 		debug3("   TRES_per_task=%s", job_specs->tres_per_task);
 
+	// NEXTGenIO
+	debug3("   workflow_start=%u, workflow_prior_dependency=%s, workflow_post_dependency=%s, workflow_end=%u, workflow_id=%u",
+			job_specs->workflow_start, job_specs->workflow_prior_dependency,
+			job_specs->workflow_post_dependency, job_specs->workflow_end, job_specs->workflow_id);
+	debug3("   Filesystem type:%s, Device:%s, Mountpoint:%s, size:%s",
+			job_specs->filesystem_type, job_specs->filesystem_device,
+			job_specs->filesystem_mountpoint, job_specs->filesystem_size);
+	debug3("   Service type:%s", job_specs->service_type);
+	debug3("   Optimise for energy=%u", job_specs->optimise_for_energy);
+	debug3("   NVRAM Mode=%u, NVRAM Size=%u", job_specs->nvram_mode, job_specs->nvram_size);
+
 	select_g_select_jobinfo_sprint(job_specs->select_jobinfo,
 				       buf, sizeof(buf), SELECT_PRINT_MIXED);
 	if (buf[0] != '\0')
@@ -4582,6 +4738,22 @@ extern struct job_record *job_array_split(struct job_record *job_ptr)
 	job_ptr_pend->wckey = xstrdup(job_ptr->wckey);
 	job_ptr_pend->deadline = job_ptr->deadline;
 
+	/* NEXTGenIO */
+	job_ptr_pend->workflow_id = job_ptr->workflow_id;
+	job_ptr_pend->workflow_start = job_ptr->workflow_start;
+	job_ptr_pend->workflow_prior_dependency = xstrdup(job_ptr->workflow_prior_dependency);
+	job_ptr_pend->workflow_post_dependency = xstrdup(job_ptr->workflow_post_dependency);
+	job_ptr_pend->workflow_end = job_ptr->workflow_end;
+	job_ptr_pend->filesystem_device = xstrdup(job_ptr->filesystem_device);
+	job_ptr_pend->filesystem_type = xstrdup(job_ptr->filesystem_type);
+	job_ptr_pend->filesystem_mountpoint = xstrdup(job_ptr->filesystem_mountpoint);
+	job_ptr_pend->filesystem_size = xstrdup(job_ptr->filesystem_type);
+	job_ptr_pend->service_type = xstrdup(job_ptr->service_type);
+	job_ptr_pend->optimise_for_energy = job_ptr->optimise_for_energy;
+	job_ptr_pend->bumped = job_ptr->bumped;
+	job_ptr_pend->nvram_mode = job_ptr->nvram_mode;
+	job_ptr_pend->nvram_size = job_ptr->nvram_size;
+
 	job_details = job_ptr->details;
 	details_new = job_ptr_pend->details;
 	memcpy(details_new, job_details, sizeof(struct job_details));
@@ -4644,6 +4816,16 @@ extern struct job_record *job_array_split(struct job_record *job_ptr)
 	details_new->std_out = xstrdup(job_details->std_out);
 	details_new->work_dir = xstrdup(job_details->work_dir);
 	details_new->x11_magic_cookie = xstrdup(job_details->x11_magic_cookie);
+
+	// NEXTGenIO
+	details_new->filesystem_device     = xstrdup(job_details->filesystem_device);
+	details_new->filesystem_type       = xstrdup(job_details->filesystem_type);
+	details_new->filesystem_mountpoint = xstrdup(job_details->filesystem_mountpoint);
+	details_new->filesystem_size       = xstrdup(job_details->filesystem_size);
+	details_new->service_type          = xstrdup(job_details->service_type);
+	details_new->optimise_for_energy   = job_details->optimise_for_energy;
+	details_new->nvram_mode            = job_details->nvram_mode;
+	details_new->nvram_size            = job_details->nvram_size;
 
 	if (job_ptr->fed_details)
 		add_fed_job_info(job_ptr);
@@ -5042,6 +5224,22 @@ extern int job_allocate(job_desc_msg_t * job_specs, int immediate,
 		}
 	}
 
+	// NEXTGenIO
+	// Set POST dependencies for each PRIOR dependency job id.
+	if (job_ptr->workflow_prior_dependency) {
+		int rc = 0;
+		rc = _workflows_set_dependencies(job_ptr);
+		if ( rc != SLURM_SUCCESS ) {
+			job_ptr->job_state  = JOB_FAILED;
+			job_ptr->exit_code  = rc;
+			job_ptr->state_reason = FAIL_WORKFLOWS;
+			xfree(job_ptr->state_desc);
+			job_ptr->start_time = job_ptr->end_time = now;
+			job_completion_logger(job_ptr, false);
+			return rc;
+		}
+	}
+
 	if (will_run && resp) {
 		job_desc_msg_t job_desc_msg;
 		int rc;
@@ -5054,6 +5252,12 @@ extern int job_allocate(job_desc_msg_t * job_specs, int immediate,
 		purge_job_record(job_ptr->job_id);
 		return rc;
 	}
+
+	if ( job_ptr->nvram_mode != NO_VAL16 ) {
+		debug4("%s: JobId=%u: is asking for NVRAM mode=%u, Size=%u, Priority=%d.",
+				__func__, job_ptr->job_id, job_ptr->nvram_mode, job_ptr->nvram_size, job_ptr->priority);
+	}
+
 
 	/*
 	 * fed jobs need to go to the siblings first so don't attempt to
@@ -6069,6 +6273,13 @@ static int _job_complete(struct job_record *job_ptr, uid_t uid, bool requeue,
 		} else
 			job_ptr->end_time = now;
 		job_completion_logger(job_ptr, false);
+	}
+
+	if ( job_ptr->workflow_post_dependency ) {
+		int rc = 0;
+		rc = _workflows_job_complete(job_ptr);
+		if ( rc == 0 )
+			info("%s: %pJ _workflows_job_complete", __func__, job_ptr);
 	}
 
 	last_job_update = now;
@@ -7403,7 +7614,15 @@ static int _test_job_desc_fields(job_desc_msg_t * job_desc)
 	    _test_strlen(job_desc->tres_per_socket, "tres_per_socket", 1024) ||
 	    _test_strlen(job_desc->tres_per_task, "tres_per_task", 1024)||
 	    _test_strlen(job_desc->wckey, "wckey", 1024)		||
-	    _test_strlen(job_desc->work_dir, "work_dir", MAXPATHLEN))
+	    _test_strlen(job_desc->work_dir, "work_dir", MAXPATHLEN) ||
+	    _test_strlen(job_desc->workflow_prior_dependency , "PRIOR dependency", 1024) ||
+	    _test_strlen(job_desc->workflow_post_dependency, "POST dependency", 1024) ||
+		_test_strlen(job_desc->filesystem_device, "Filesystem device", 256) ||
+		_test_strlen(job_desc->filesystem_type, "Filesystem type", 128) ||
+		_test_strlen(job_desc->filesystem_mountpoint, "Filesystem mountpoint", 512) ||
+		_test_strlen(job_desc->filesystem_size, "Filesystem size", 32) ||
+		_test_strlen(job_desc->service_type, "Service type", 128)
+		)
 		return ESLURM_PATHNAME_TOO_LONG;
 
 	return SLURM_SUCCESS;
@@ -8080,6 +8299,23 @@ _copy_job_desc_to_job_record(job_desc_msg_t * job_desc,
 	job_ptr->warn_signal = job_desc->warn_signal;
 	job_ptr->warn_time   = job_desc->warn_time;
 
+	/* NEXTGenIO */
+	job_ptr->workflow_id               = job_desc->workflow_id;
+	job_ptr->workflow_start            = job_desc->workflow_start;
+	job_ptr->workflow_prior_dependency = xstrdup(job_desc->workflow_prior_dependency);
+	job_ptr->workflow_post_dependency  = xstrdup(job_desc->workflow_post_dependency);
+	job_ptr->workflow_end              = job_desc->workflow_end;
+	if ( job_ptr->workflow_start != 0 )
+		job_ptr->workflow_id = job_ptr->job_id;
+	job_ptr->filesystem_device         = xstrdup(job_desc->filesystem_device);
+	job_ptr->filesystem_type		   = xstrdup(job_desc->filesystem_type);
+	job_ptr->filesystem_mountpoint	   = xstrdup(job_desc->filesystem_mountpoint);
+	job_ptr->filesystem_size		   = xstrdup(job_desc->filesystem_size);
+	job_ptr->service_type			   = xstrdup(job_desc->service_type);
+	job_ptr->optimise_for_energy	   = job_desc->optimise_for_energy;
+	job_ptr->nvram_mode                = job_desc->nvram_mode;
+	job_ptr->nvram_size                = job_desc->nvram_size;
+
 	detail_ptr = job_ptr->details;
 	detail_ptr->argc = job_desc->argc;
 	detail_ptr->argv = job_desc->argv;
@@ -8220,6 +8456,16 @@ _copy_job_desc_to_job_record(job_desc_msg_t * job_desc,
 		detail_ptr->max_nodes =
 			MIN(node_record_count, detail_ptr->num_tasks);
 	}
+
+	// NEXTGenIO
+	detail_ptr->filesystem_device     = xstrdup(job_desc->filesystem_device);
+	detail_ptr->filesystem_type       = xstrdup(job_desc->filesystem_type);
+	detail_ptr->filesystem_mountpoint = xstrdup(job_desc->filesystem_mountpoint);
+	detail_ptr->filesystem_size       = xstrdup(job_desc->filesystem_size);
+	detail_ptr->service_type          = xstrdup(job_desc->service_type);
+	detail_ptr->optimise_for_energy   = job_desc->optimise_for_energy;
+	detail_ptr->nvram_mode            = job_desc->nvram_mode;
+	detail_ptr->nvram_size            = job_desc->nvram_size;
 
 	return SLURM_SUCCESS;
 }
@@ -9998,6 +10244,21 @@ void pack_job(struct job_record *dump_job_ptr, uint16_t show_flags, Buf buffer,
 		packstr(dump_job_ptr->state_desc, buffer);
 		packstr(dump_job_ptr->resv_name, buffer);
 		packstr(dump_job_ptr->mcs_label, buffer);
+
+		/* NEXTGenIO */
+		pack32(dump_job_ptr->workflow_id, buffer);
+		pack16(dump_job_ptr->workflow_start, buffer);
+		packstr(dump_job_ptr->workflow_prior_dependency, buffer);
+		packstr(dump_job_ptr->workflow_post_dependency, buffer);
+		pack16(dump_job_ptr->workflow_end, buffer);
+		packstr(dump_job_ptr->filesystem_device, buffer);
+		packstr(dump_job_ptr->filesystem_type, buffer);
+		packstr(dump_job_ptr->filesystem_mountpoint, buffer);
+		packstr(dump_job_ptr->filesystem_size, buffer);
+		packstr(dump_job_ptr->service_type, buffer);
+		pack8(dump_job_ptr->optimise_for_energy, buffer);
+		pack16(dump_job_ptr->nvram_mode, buffer);
+		pack32(dump_job_ptr->nvram_size, buffer);
 
 		pack32(dump_job_ptr->exit_code, buffer);
 		pack32(dump_job_ptr->derived_ec, buffer);
@@ -13987,6 +14248,11 @@ static void _send_job_kill(struct job_record *job_ptr)
 	kill_job->spank_job_env = xduparray(job_ptr->spank_job_env_size,
 					    job_ptr->spank_job_env);
 	kill_job->spank_job_env_size = job_ptr->spank_job_env_size;
+	kill_job->filesystem_type       = xstrdup(job_ptr->filesystem_type);		// NEXTGenIO
+	kill_job->filesystem_mountpoint = xstrdup(job_ptr->filesystem_mountpoint);	// NEXTGenIO
+	kill_job->filesystem_device     = xstrdup(job_ptr->filesystem_device);		// NEXTGenIO
+	kill_job->service_type          = xstrdup(job_ptr->service_type);			// NEXTGenIO
+	kill_job->optimise_for_energy   = job_ptr->optimise_for_energy;				// NEXTGenIO
 
 #ifdef HAVE_FRONT_END
 	if (job_ptr->batch_host &&
@@ -14401,6 +14667,11 @@ abort_job_on_node(uint32_t job_id, struct job_record *job_ptr, char *node_name)
 		kill_req->spank_job_env = xduparray(job_ptr->spank_job_env_size,
 						    job_ptr->spank_job_env);
 		kill_req->spank_job_env_size = job_ptr->spank_job_env_size;
+		kill_req->filesystem_type       = xstrdup(job_ptr->filesystem_type);		// NEXTGenIO
+		kill_req->filesystem_mountpoint = xstrdup(job_ptr->filesystem_mountpoint);	// NEXTGenIO
+		kill_req->filesystem_device     = xstrdup(job_ptr->filesystem_device);		// NEXTGenIO
+		kill_req->service_type          = xstrdup(job_ptr->service_type);			// NEXTGenIO
+		kill_req->optimise_for_energy   = job_ptr->optimise_for_energy;				// NEXTGenIO
 	} else {
 		/* kill_req->start_time = 0;  Default value */
 	}
@@ -14451,6 +14722,11 @@ extern void kill_job_on_node(struct job_record *job_ptr,
 	kill_req->spank_job_env = xduparray(job_ptr->spank_job_env_size,
 					    job_ptr->spank_job_env);
 	kill_req->spank_job_env_size = job_ptr->spank_job_env_size;
+	kill_req->filesystem_type       = xstrdup(job_ptr->filesystem_type);		// NEXTGenIO
+	kill_req->filesystem_mountpoint = xstrdup(job_ptr->filesystem_mountpoint);	// NEXTGenIO
+	kill_req->filesystem_device     = xstrdup(job_ptr->filesystem_device);		// NEXTGenIO
+	kill_req->service_type          = xstrdup(job_ptr->service_type);			// NEXTGenIO
+	kill_req->optimise_for_energy   = job_ptr->optimise_for_energy;				// NEXTGenIO
 
 	agent_info = xmalloc(sizeof(agent_arg_t));
 	agent_info->node_count	= 1;
@@ -17371,6 +17647,21 @@ extern job_desc_msg_t *copy_job_record_to_job_desc(struct job_record *job_ptr)
 			job_ptr->fed_details->siblings_viable;
 	}
 
+	/* NEXTGenIO */
+	job_desc->workflow_id               = job_ptr->workflow_id;
+	job_desc->workflow_start            = job_ptr->workflow_start;
+	job_desc->workflow_prior_dependency = xstrdup(job_ptr->workflow_prior_dependency);
+	job_desc->workflow_post_dependency  = xstrdup(job_ptr->workflow_post_dependency);
+	job_desc->workflow_end              = job_ptr->workflow_end;
+	job_desc->filesystem_device         = xstrdup(details->filesystem_device);
+	job_desc->filesystem_type           = xstrdup(details->filesystem_type);
+	job_desc->filesystem_mountpoint     = xstrdup(details->filesystem_mountpoint);
+	job_desc->filesystem_size           = xstrdup(details->filesystem_size);
+	job_desc->service_type              = xstrdup(details->service_type);
+	job_desc->optimise_for_energy       = details->optimise_for_energy;
+	job_desc->nvram_mode                = job_ptr->nvram_mode;
+	job_desc->nvram_size                = job_ptr->nvram_size;
+
 	return job_desc;
 }
 
@@ -17907,6 +18198,27 @@ _kill_dependent(struct job_record *job_ptr)
 	srun_allocate_abort(job_ptr);
 }
 
+/* _kill_workflow()
+ *
+ * Exterminate the job that has invalid workflow dependency
+ * condition.
+ */
+static void
+_kill_workflow(struct job_record *job_ptr)
+{
+	time_t now = time(NULL);
+
+	info("%s: Job workflow dependency can't be satisfied, cancelling %pJ",
+	     __func__, job_ptr);
+	job_ptr->job_state = JOB_CANCELLED;
+	xfree(job_ptr->state_desc);
+	job_ptr->start_time = now;
+	job_ptr->end_time = now;
+	job_completion_logger(job_ptr, false);
+	last_job_update = now;
+	srun_allocate_abort(job_ptr);
+}
+
 static job_fed_details_t *_dup_job_fed_details(job_fed_details_t *src)
 {
 	job_fed_details_t *dst = NULL;
@@ -18240,4 +18552,232 @@ extern void update_job_limit_set_tres(uint16_t **limits_pptr)
 		}
 		memcpy(limits_ptr, tmp_tres, new_size);
 	}
+}
+
+extern int _workflows_set_dependencies(struct job_record *job_ptr)
+{
+	debug2("%s: Job id:%u is part of workflow (%u), setting POST dependencies of these JOBs [%s].",
+			__func__, job_ptr->job_id, job_ptr->workflow_id, job_ptr->workflow_prior_dependency);
+	char *job_str_tmp = NULL, *tok, *save_ptr = NULL, *end_ptr = NULL;
+	long int long_id;
+	int counter = 0, rc =0;
+	uint32_t job_id = 0, workflow_id = NO_VAL;
+
+	// Iterate through all PRIOR dependencies of current job
+	job_str_tmp = xstrdup(job_ptr->workflow_prior_dependency);
+	tok = strtok_r(job_str_tmp, ",", &save_ptr);
+	while (tok) {
+		if (counter > 15) {
+			error("%s: Too many tries: exiting (%d)", __func__, counter);
+			break;
+		}
+
+		long_id = strtol(tok, &end_ptr, 10);
+		if ((long_id <= 0) || (long_id == LONG_MAX) ||
+		    ((end_ptr[0] != '\0') && (end_ptr[0] != '_'))) {
+			info("%s: invalid job id %s", __func__, tok);
+			counter++;
+			continue;
+		}
+
+		job_id = (uint32_t) long_id;
+		if ( job_id == job_ptr->job_id ) {
+			// We cannot have a circular dependency.
+			error("%s: Circular workflows (job id:%u, prior_dependency id:%u [%s])",
+				  __func__, job_ptr->job_id, job_id, job_ptr->workflow_prior_dependency);
+			rc = ESLURM_INVALID_WORKFLOW_PRIOR_DEPENDENCY_CIRCULAR_JOBID;
+			break;
+		}
+
+		struct job_record *job_ptr2 = find_job_record(job_id);
+		if (job_ptr2) {
+			debug2("%s: PRIOR_DEPENDENCY sched: JobId=%u, State=%s, Workflow_id=%u, Start=%u, End=%u, PriorDependency=%s, PostDependency=%s",
+					__func__, job_ptr2->job_id, job_state_string(job_ptr2->job_state), job_ptr2->workflow_id, job_ptr2->workflow_start, job_ptr2->workflow_end,
+					job_ptr2->workflow_prior_dependency, job_ptr2->workflow_post_dependency);
+
+			if ( IS_JOB_FINISHED(job_ptr2) ) {
+				// The PRIOR (parent) dependency Job has finished. It is not allowed to add a new job.
+				error("%s: Invalid Prior dependency job has already finished (prior dependency id:%u [%s])",
+						__func__, job_id, job_ptr->workflow_prior_dependency);
+				rc = ESLURM_INVALID_WORKFLOW_PRIOR_DEPENDENCY_FINISHED;
+				xfree(job_str_tmp);
+				break;
+			}
+
+			if ( IS_JOB_CANCELLED(job_ptr2) || IS_JOB_FAILED(job_ptr2) ) {
+				// The PRIOR (parent) dependency was cancelled or failed. We need to stop subsequent jobs.
+				error("%s: Invalid Prior dependency job has been cancelled or failed (prior dependency id:%u [%s])",
+						__func__, job_id, job_ptr->workflow_prior_dependency);
+				rc = ESLURM_INVALID_WORKFLOW_PRIOR_DEPENDENCY_FAILED_OR_CANCELLED;
+				xfree(job_str_tmp);
+				break;
+			}
+
+			if (job_ptr2->workflow_id == NO_VAL) {
+				// Job has NO POST (children) dependencies. Therefore it must be part of a workflow. Is it?
+				error("%s: Invalid Prior dependency job is not part of a workflow (prior dependency id:%u (%u) [%s])",
+						__func__, job_id, job_ptr2->workflow_id, job_ptr2->workflow_prior_dependency);
+				rc = ESLURM_INVALID_WORKFLOW_PRIOR_DEPENDENCY_NOT_PART_OF_WORKFLOW;
+				xfree(job_str_tmp);
+				break;
+			}
+
+			if (job_ptr2->workflow_end != 0) {
+				// Job is an END workflow job. Continuing this path is not allowed.
+				error("%s: Invalid Prior dependency job is an END part of a workflow (prior dependency id:%u (%u) [%s])",
+						__func__, job_id, job_ptr2->workflow_id, job_ptr2->workflow_prior_dependency);
+				rc = ESLURM_INVALID_WORKFLOW_PRIOR_DEPENDENCY_ENDS_WORKFLOW;
+				xfree(job_str_tmp);
+				break;
+			}
+
+			if (job_ptr->account) {
+				if (!job_ptr2->account) {
+					// Job does not have an account. Continuing this path is not allowed.
+					error("%s: Invalid Account for job %d (account %s / NULL [%s])",
+							__func__, job_id, job_ptr->account, job_ptr2->workflow_prior_dependency);
+					rc = ESLURM_INVALID_WORKFLOW_PRIOR_DEPENDENCY_INVALID_ACCOUNT;
+					xfree(job_str_tmp);
+					break;
+				}
+				if (xstrcmp(job_ptr->account, job_ptr2->account) != 0) {
+					// Job does not have the same account. Continuing this path is not allowed.
+					error("%s: Invalid Account for job %d (account %s / %s [%s])",
+							__func__, job_id, job_ptr->account, job_ptr2->account, job_ptr2->workflow_prior_dependency);
+					rc = ESLURM_INVALID_WORKFLOW_PRIOR_DEPENDENCY_INVALID_ACCOUNT;
+					xfree(job_str_tmp);
+					break;
+				}
+			}
+
+			// Iterate through all POST (children) dependencies of PRIOR (parent) dependency job
+			if (job_ptr2->workflow_post_dependency) {
+				char *job_str_tmp1 = NULL, *tok1, *save_ptr1 = NULL, *end_ptr1 = NULL;
+				long int long_id1;
+				uint32_t job_id1 = 0;
+
+				job_str_tmp1 = xstrdup(job_ptr2->workflow_post_dependency);
+				tok1 = strtok_r(job_str_tmp1, ",", &save_ptr1);
+				while (tok1) {
+					if (counter > 15) {
+						error("%s: Too many tries:: exiting (%d)", __func__, counter);
+						xfree(job_str_tmp1);
+						break;
+					}
+
+					long_id1 = strtol(tok1, &end_ptr1, 10);
+					if ((long_id1 <= 0) || (long_id1 == LONG_MAX) ||
+							((end_ptr1[0] != '\0') && (end_ptr1[0] != '_'))) {
+						info("%s: invalid job id %s", __func__, tok1);
+						counter++;
+						continue;
+					}
+
+					job_id1 = (uint32_t) long_id1;
+					if ( job_id == job_ptr->job_id ) {
+						// We cannot have a circular dependency.
+						error("%s: Circular workflows (job id:%u, post_dependency id:%u [%s])",
+								__func__, job_ptr2->job_id, job_id1, job_ptr2->workflow_post_dependency);
+						rc = ESLURM_INVALID_WORKFLOW_PRIOR_DEPENDENCY_CIRCULAR_JOBID;
+						xfree(job_str_tmp1);
+						break;
+					}
+					tok1 = strtok_r(NULL, ",", &save_ptr1);
+				}
+				xfree(job_str_tmp1);
+			}
+
+			if (job_ptr2->workflow_post_dependency)
+				xstrcat(job_ptr2->workflow_post_dependency, ",");
+			char tmp_job_id[64];
+			snprintf(tmp_job_id, sizeof(tmp_job_id), "%u", job_ptr->job_id);
+			xstrcat(job_ptr2->workflow_post_dependency, tmp_job_id);
+
+			if (workflow_id == NO_VAL)
+				workflow_id = job_ptr2->workflow_id;
+			else if (workflow_id != job_ptr2->workflow_id) {
+				// Being part of SEVERAL workflows is NOT allowed.
+				error("%s: Multiple workflows are not allowed (workflow_id:%u, new workflow_id:%u)",
+					 __func__, workflow_id, job_ptr2->job_id);
+				rc = ESLURM_INVALID_WORKFLOW_PRIOR_DEPENDENCY_PART_OF_MULTIPLE_WORKFLOWS;
+				xfree(job_str_tmp);
+				break;
+			}
+
+			info("%s: Updated job:%u POST dependencies to [%s]",
+					__func__, job_ptr2->job_id, job_ptr2->workflow_post_dependency);
+			if ( workflow_id != NO_VAL ) {
+				job_ptr->workflow_id = workflow_id;
+				info("%s: Updated job:%u Workflow_id to %u",
+					__func__, job_ptr->job_id, job_ptr->workflow_id);
+			}
+
+			xfree(job_ptr->state_desc);
+			xfree(job_ptr2->state_desc);
+
+			rc = SLURM_SUCCESS;
+		} else {
+			// The PRIOR (parent) dependency Job was not found at all
+			error("%s: Invalid Prior Dependency job id (parent id:%u [%s])",
+				  __func__, job_id, job_ptr->workflow_prior_dependency);
+
+			rc = ESLURM_INVALID_WORKFLOW_PRIOR_DEPENDENCY_JOBID;
+			xfree(job_str_tmp);
+			break;
+		}
+
+		tok = strtok_r(NULL, ",", &save_ptr);
+	}
+	xfree(job_str_tmp);
+
+	if (workflow_id != NO_VAL) {
+		job_ptr->workflow_id = workflow_id;
+	} else {
+		// Something went wrong and could not find a workflow_id
+		error("%s: Could not find workflow_id (jod_id=%u, PRIOR:%s)",
+			 __func__, job_ptr->job_id, job_ptr->workflow_prior_dependency);
+		rc = ESLURM_INVALID_WORKFLOW_PRIOR_DEPENDENCY_JOBID;
+	}
+
+	return rc;
+}
+
+extern int _workflows_job_complete(struct job_record *job_ptr)
+{
+	debug2("%s: Job id:%u is part of workflow (%u), setting POST dependencies after job complete [%s].",
+			__func__, job_ptr->job_id, job_ptr->workflow_id, job_ptr->workflow_post_dependency);
+	char *job_str_tmp = NULL, *tok, *save_ptr = NULL, *end_ptr = NULL;
+	long int long_id;
+	int rc = 0;
+	uint32_t job_id = 0;
+
+	// Iterate through all PRIOR dependencies of current job
+	job_str_tmp = xstrdup(job_ptr->workflow_post_dependency);
+	tok = strtok_r(job_str_tmp, ",", &save_ptr);
+	while (tok) {
+		long_id = strtol(tok, &end_ptr, 10);
+		if ((long_id <= 0) || (long_id == LONG_MAX) ||
+		    ((end_ptr[0] != '\0') && (end_ptr[0] != '_'))) {
+			info("%s: invalid job id %s", __func__, tok);
+			continue;
+		}
+
+		job_id = (uint32_t) long_id;
+		struct job_record *job_ptr2 = find_job_record(job_id);
+		if (job_ptr2) {
+			debug2("%s: POST_DEPENDENCY sched: JobId=%u, State=%s, Workflow_id=%u, Start=%u, End=%u, PriorDependency=%s, PostDependency=%s",
+					__func__, job_ptr2->job_id, job_state_string(job_ptr2->job_state), job_ptr2->workflow_id, job_ptr2->workflow_start, job_ptr2->workflow_end,
+					job_ptr2->workflow_prior_dependency, job_ptr2->workflow_post_dependency);
+
+
+			if ( IS_JOB_CANCELLED(job_ptr) || IS_JOB_FAILED(job_ptr) ) {
+				_kill_workflow(job_ptr2);
+			}
+		}
+
+		tok = strtok_r(NULL, ",", &save_ptr);
+	}
+	xfree(job_str_tmp);
+
+	return rc;
 }

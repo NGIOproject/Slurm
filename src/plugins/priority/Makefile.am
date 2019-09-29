@@ -1,1 +1,1 @@
-SUBDIRS = basic multifactor
+SUBDIRS = basic multifactor multifactorworkflows

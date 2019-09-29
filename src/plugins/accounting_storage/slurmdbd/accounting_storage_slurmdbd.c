@@ -2660,6 +2660,15 @@ extern int jobacct_storage_p_job_complete(void *db_conn,
 			req.submit_time = job_ptr->details->submit_time;
 	}
 
+	/* NEXTGenIO */
+	if (job_ptr->workflow_id != NO_VAL) {
+		req.workflow_id               = job_ptr->workflow_id;
+		req.workflow_prior_dependency = job_ptr->workflow_prior_dependency;
+		req.workflow_post_dependency  = job_ptr->workflow_post_dependency;
+		req.workflow_start            = job_ptr->workflow_start;
+		req.workflow_end              = job_ptr->workflow_end;
+	}
+
 	if (!(job_ptr->bit_flags & TRES_STR_CALC))
 		req.tres_alloc_str = job_ptr->tres_alloc_str;
 

@@ -1607,6 +1607,58 @@ static int _attempt_backfill(void)
 			}
 		}
 
+		/* NEXTGenIO */
+		if (job_ptr->workflow_prior_dependency) {
+			debug4("backfill: backfill.c: _attempt_backfill(): JobId=%u: Part of workflow (PRIOR is %s) (ID is %u).",
+					job_ptr->job_id, job_ptr->workflow_prior_dependency, job_ptr->workflow_id);
+
+			char *job_str_tmp = NULL, *tok, *save_ptr = NULL, *end_ptr = NULL;
+			bool exit_loop = false, exit_loop_and_continue = false;
+			long int long_id;
+			uint32_t job_id = 0;
+
+			// Iterate through all PRIOR dependencies of current job
+			job_str_tmp = xstrdup(job_ptr->workflow_prior_dependency);
+			tok = strtok_r(job_str_tmp, ",", &save_ptr);
+			while (tok && (exit_loop == false) ) {
+				long_id = strtol(tok, &end_ptr, 10);
+				if ((long_id <= 0) ||
+				    ((end_ptr[0] != '\0') && (end_ptr[0] != '_'))) {
+					info("backfill: %s: invalid job id %s", __func__, tok);
+					continue;
+				}
+
+				job_id = (uint32_t) long_id;
+				struct job_record *job_ptr2 = find_job_record(job_id);
+				if (job_ptr2) {
+					debug4("backfill: _attempt_backfill.c: _schedule(): PRIOR sched: JobId=%u. State=%s. Reason=%s. "
+						   "Priority=%u. Partition=%s.",
+						   job_ptr2->job_id,
+						   job_state_string(job_ptr2->job_state),
+						   job_reason_string(job_ptr2->state_reason),
+						   job_ptr2->priority, job_ptr2->partition);
+					if (IS_JOB_RUNNING(job_ptr2) || IS_JOB_PENDING(job_ptr2)) {
+						job_ptr->state_reason = WAIT_WORKFLOWS;
+						last_job_update = now;
+						xfree(job_ptr->state_desc);
+						xfree(job_ptr2->state_desc);
+						debug4("backfill: sched: JobId=%u. State=%s. Reason=%s. "
+								"Priority=%u. Partition=%s.",
+								job_ptr->job_id,
+								job_state_string(job_ptr->job_state),
+								job_reason_string(job_ptr->state_reason),
+								job_ptr->priority, job_ptr->partition);
+						exit_loop = true;
+						exit_loop_and_continue = true;
+					}
+				}
+				tok = strtok_r(NULL, ",", &save_ptr);
+			}
+			xfree(job_str_tmp);
+			if ( exit_loop_and_continue )
+				continue;
+		}
+
 		if (job_ptr->qos_id) {
 			assoc_mgr_lock_t locks = {
 				READ_LOCK, NO_LOCK, READ_LOCK, NO_LOCK,

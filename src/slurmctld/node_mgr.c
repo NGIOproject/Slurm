@@ -244,6 +244,11 @@ _dump_node_state (struct node_record *dump_node_ptr, Buf buffer)
 	pack_time(dump_node_ptr->boot_req_time, buffer);
 	pack16  (dump_node_ptr->protocol_version, buffer);
 	packstr (dump_node_ptr->mcs_label, buffer);
+	pack16  (dump_node_ptr->has_nvram, buffer);					// NEXTGenIO
+	pack32  (dump_node_ptr->nvram_capacity, buffer);			// NEXTGenIO
+	pack32  (dump_node_ptr->nvram_memory_capacity, buffer);		// NEXTGenIO
+	pack32  (dump_node_ptr->nvram_appdirect_capacity, buffer);	// NEXTGenIO
+	pack16  (dump_node_ptr->nvram_number_of_namespaces, buffer);// NEXTGenIO
 	(void) gres_plugin_node_state_pack(dump_node_ptr->gres_list, buffer,
 					   dump_node_ptr->name);
 }
@@ -292,6 +297,8 @@ extern int load_all_node_state ( bool state_only )
 	uint64_t real_memory;
 	uint32_t tmp_disk, name_len;
 	uint32_t reason_uid = NO_VAL;
+	uint16_t has_nvram = 0, number_of_namespaces = 0;		// NEXTGenIO
+	uint32_t nvram_capacity = NO_VAL, nvram_memory_capacity = NO_VAL, nvram_appdirect_capacity = NO_VAL; // NEXTGenIO
 	time_t boot_req_time = 0, reason_time = 0;
 	List gres_list = NULL;
 	struct node_record *node_ptr;
@@ -369,6 +376,11 @@ extern int load_all_node_state ( bool state_only )
 			safe_unpack_time (&boot_req_time, buffer);
 			safe_unpack16 (&obj_protocol_version, buffer);
 			safe_unpackstr_xmalloc (&mcs_label, &name_len, buffer);
+			safe_unpack16 (&has_nvram,                buffer);	// NEXTGenIO
+			safe_unpack32 (&nvram_capacity,           buffer);	// NEXTGenIO
+			safe_unpack32 (&nvram_memory_capacity,    buffer);	// NEXTGenIO
+			safe_unpack32 (&nvram_appdirect_capacity, buffer);	// NEXTGenIO
+			safe_unpack16 (&number_of_namespaces,     buffer);	// NEXTGenIO
 			if (gres_plugin_node_state_unpack(
 				    &gres_list, buffer, node_name,
 				    protocol_version) != SLURM_SUCCESS)
@@ -505,6 +517,11 @@ extern int load_all_node_state ( bool state_only )
 					node_ptr->threads       = threads;
 					node_ptr->real_memory   = real_memory;
 					node_ptr->tmp_disk      = tmp_disk;
+					node_ptr->has_nvram		            = has_nvram;				// NEXTGenIO
+					node_ptr->nvram_capacity	        = nvram_capacity;			// NEXTGenIO
+					node_ptr->nvram_memory_capacity	    = nvram_memory_capacity;	// NEXTGenIO
+					node_ptr->nvram_appdirect_capacity	= nvram_appdirect_capacity;	// NEXTGenIO
+					node_ptr->nvram_number_of_namespaces= number_of_namespaces;		// NEXTGenIO
 				}
 				if (node_state & NODE_STATE_MAINT)
 					node_ptr->node_state |= NODE_STATE_MAINT;
@@ -549,6 +566,11 @@ extern int load_all_node_state ( bool state_only )
 				node_ptr->threads       = threads;
 				node_ptr->real_memory   = real_memory;
 				node_ptr->tmp_disk      = tmp_disk;
+				node_ptr->has_nvram		            = has_nvram;				// NEXTGenIO
+				node_ptr->nvram_capacity	        = nvram_capacity;			// NEXTGenIO
+				node_ptr->nvram_memory_capacity	    = nvram_memory_capacity;	// NEXTGenIO
+				node_ptr->nvram_appdirect_capacity	= nvram_appdirect_capacity;	// NEXTGenIO
+				node_ptr->nvram_number_of_namespaces= number_of_namespaces;		// NEXTGenIO
 			}
 
 			xfree(node_ptr->features_act);
@@ -611,6 +633,11 @@ extern int load_all_node_state ( bool state_only )
 			node_ptr->threads       = threads;
 			node_ptr->real_memory   = real_memory;
 			node_ptr->tmp_disk      = tmp_disk;
+			node_ptr->has_nvram		            = has_nvram;				// NEXTGenIO
+			node_ptr->nvram_capacity      	    = nvram_capacity;			// NEXTGenIO
+			node_ptr->nvram_memory_capacity  	= nvram_memory_capacity;	// NEXTGenIO
+			node_ptr->nvram_appdirect_capacity	= nvram_appdirect_capacity;	// NEXTGenIO
+			node_ptr->nvram_number_of_namespaces= number_of_namespaces;		// NEXTGenIO
 			node_ptr->last_response = (time_t) 0;
 			xfree(node_ptr->mcs_label);
 			node_ptr->mcs_label	= mcs_label;
@@ -1084,6 +1111,10 @@ static void _pack_node (struct node_record *dump_node_ptr, Buf buffer,
 				     protocol_version);
 
 		packstr(dump_node_ptr->tres_fmt_str,buffer);
+		pack32(dump_node_ptr->nvram_capacity, buffer);				// NEXTGenIO
+		pack32(dump_node_ptr->nvram_memory_capacity, buffer);		// NEXTGenIO
+		pack32(dump_node_ptr->nvram_appdirect_capacity, buffer);	// NEXTGenIO
+		pack16(dump_node_ptr->nvram_number_of_namespaces, buffer);	// NEXTGenIO
 	} else if (protocol_version >= SLURM_MIN_PROTOCOL_VERSION) {
 		packstr (dump_node_ptr->name, buffer);
 		packstr (dump_node_ptr->node_hostname, buffer);
@@ -1790,6 +1821,11 @@ struct config_record * _dup_config(struct config_record *config_ptr)
 	new_config_ptr->weight      = config_ptr->weight;
 	new_config_ptr->feature     = xstrdup(config_ptr->feature);
 	new_config_ptr->gres        = xstrdup(config_ptr->gres);
+	new_config_ptr->has_nvram                 = config_ptr->has_nvram;					// NEXTGenIO
+	new_config_ptr->nvram_capacity            = config_ptr->nvram_capacity;				// NEXTGenIO
+	new_config_ptr->nvram_memory_capacity     = config_ptr->nvram_memory_capacity;		// NEXTGenIO
+	new_config_ptr->nvram_appdirect_capacity  = config_ptr->nvram_appdirect_capacity;	// NEXTGenIO
+	new_config_ptr->nvram_number_of_namespaces= config_ptr->nvram_number_of_namespaces;	// NEXTGenIO
 
 	return new_config_ptr;
 }
@@ -2355,6 +2391,11 @@ static void _split_node_config(struct node_record *node_ptr,
 	}
 	config_ptr->cores = reg_msg->cores;
 	config_ptr->sockets = reg_msg->sockets;
+	config_ptr->has_nvram = reg_msg->has_nvram;								// NEXTGenIO
+	config_ptr->nvram_appdirect_capacity = reg_msg->nvram_appdirect_capacity;
+	config_ptr->nvram_capacity = reg_msg->nvram_capacity;
+	config_ptr->nvram_memory_capacity = reg_msg->nvram_memory_capacity;
+	config_ptr->nvram_number_of_namespaces = reg_msg->nvram_number_of_namespaces;
 }
 
 /*
@@ -2648,6 +2689,17 @@ extern int validate_node_specs(slurm_node_registration_status_msg_t *reg_msg,
 	xfree(node_ptr->os);
 	node_ptr->os = reg_msg->os;
 	reg_msg->os = NULL;	/* Nothing left to free */
+
+	// NEXTGenIO
+	node_ptr->has_nvram = reg_msg->has_nvram;
+	node_ptr->nvram_capacity = reg_msg->nvram_capacity;
+	node_ptr->nvram_memory_capacity = reg_msg->nvram_memory_capacity;
+	node_ptr->nvram_appdirect_capacity = reg_msg->nvram_appdirect_capacity;
+	debug3("%s: %s NVRAM Status=%1u (NVRAM Capacity: %d, Memory Capacity:%d, AppDirect Capacity:%d) (message:%1u).",
+			__func__, reg_msg->node_name, node_ptr->has_nvram, node_ptr->nvram_capacity, node_ptr->nvram_memory_capacity,
+			node_ptr->nvram_appdirect_capacity, reg_msg->has_nvram);
+	node_ptr->nvram_number_of_namespaces = reg_msg->nvram_number_of_namespaces;
+	debug3("%s: %s Partitions=%1u", __func__, reg_msg->node_name, node_ptr->nvram_number_of_namespaces);
 
 	if (node_ptr->cpu_load != reg_msg->cpu_load) {
 		node_ptr->cpu_load = reg_msg->cpu_load;

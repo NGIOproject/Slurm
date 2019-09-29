@@ -246,6 +246,11 @@ typedef struct dbd_job_comp_msg {
 				 * record in db */
 	char *	 system_comment;/* job system comment field */
 	char    *tres_alloc_str;/* Simple comma separated list of TRES */
+	uint32_t workflow_id;			/* workflow ID, default set by Slurm NEXTGenIO */
+	uint16_t workflow_start; 		/* Is this the start of a workflow? NEXTGenIO */
+	char *workflow_prior_dependency;	/* Depends on JOB IDs NEXTGenIO */
+	char *workflow_post_dependency;		/* Dependent JOB IDs NEXTGenIO */
+	uint16_t workflow_end;			/* Is this the end of a workflow? NEXTGenIO */
 } dbd_job_comp_msg_t;
 
 typedef struct dbd_job_start_msg {

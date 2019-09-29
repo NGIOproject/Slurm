@@ -778,7 +778,39 @@ static job_desc_msg_t *_job_desc_msg_create_from_opts(slurm_opt_t *opt_local)
 	j->contiguous     = opt_local->contiguous;
 	if (opt_local->core_spec != NO_VAL16)
 		j->core_spec      = opt_local->core_spec;
-	j->features       = opt_local->constraints;
+
+	/* NEXTGenIO */
+	j->workflow_id           	  = opt_local->workflow_id;
+	j->workflow_start             = opt_local->workflow_start;
+	if (opt_local->workflow_prior_dependency)
+		j->workflow_prior_dependency  = xstrdup(opt_local->workflow_prior_dependency);
+	if (opt_local->workflow_post_dependency)
+		j->workflow_post_dependency   = xstrdup(opt_local->workflow_post_dependency);
+	j->workflow_end               = opt_local->workflow_end;
+	if (opt_local->filesystem_device)
+		j->filesystem_device  = xstrdup(opt_local->filesystem_device);
+	if (opt_local->filesystem_type)
+		j->filesystem_type  = xstrdup(opt_local->filesystem_type);
+	if (opt_local->filesystem_mountpoint)
+		j->filesystem_mountpoint  = xstrdup(opt_local->filesystem_mountpoint);
+	if (opt_local->filesystem_size)
+		j->filesystem_size  = xstrdup(opt_local->filesystem_size);
+	if (opt_local->service_type)
+		j->service_type  = xstrdup(opt_local->service_type);
+	j->optimise_for_energy  = opt_local->optimise_for_energy;
+	if (opt_local->nvram_options) {
+		j->nvram_mode  = opt_local->nvram_mode;
+		j->nvram_size  = opt_local->nvram_size;
+
+		if ( opt_local->nvram_mode == 1 )
+			j->features = xstrdup("1LM");
+		else if ( opt_local->nvram_mode == 2 )
+			j->features = xstrdup("2LM");
+		else
+			j->features = opt_local->constraints;
+	} else
+		j->features = opt_local->constraints;
+
 	j->cluster_features = opt_local->c_constraints;
 	if (opt_local->immediate == 1)
 		j->immediate = opt_local->immediate;

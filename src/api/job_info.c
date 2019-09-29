@@ -989,6 +989,33 @@ slurm_sprint_job_info ( job_info_t * job_ptr, int one_liner )
 		xstrfmtcat(out, "TresPerTask=%s", job_ptr->tres_per_task);
 	}
 
+	/****** Line (optional) NEXTGenIO ******/
+	if (job_ptr->workflow_id != NO_VAL) {
+		xstrcat(out, line_end);
+		xstrfmtcat(out, "Workflow ID=%u, Start=%u, PRIOR=%s, POST=%s, End=%u",
+			   job_ptr->workflow_id, job_ptr->workflow_start, job_ptr->workflow_prior_dependency,
+			   job_ptr->workflow_post_dependency, job_ptr->workflow_end);
+	}
+
+	if (job_ptr->filesystem_type) {
+		xstrcat(out, line_end);
+		xstrfmtcat(out, "Filesystem type=%s, Device=%s, Mountpoint=%s, Size=%s",
+			   job_ptr->filesystem_type, job_ptr->filesystem_device, job_ptr->filesystem_mountpoint, job_ptr->filesystem_size);
+	}
+
+	if (job_ptr->service_type) {
+		xstrcat(out, line_end);
+		xstrfmtcat(out, "Service type=%s", job_ptr->service_type);
+	}
+
+	if (job_ptr->nvram_mode != NO_VAL16) {
+		xstrcat(out, line_end);
+		xstrfmtcat(out, "NVRAM Mode=%u, NVRAM Size=%u", job_ptr->nvram_mode, job_ptr->nvram_size);
+	}
+
+	xstrcat(out, line_end);
+	xstrfmtcat(out, "Optimise for energy=%s", job_ptr->optimise_for_energy ? "no" : "yes");
+
 	/****** END OF JOB RECORD ******/
 	if (one_liner)
 		xstrcat(out, "\n");

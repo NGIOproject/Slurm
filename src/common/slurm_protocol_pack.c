@@ -3401,6 +3401,11 @@ _pack_node_registration_status_msg(slurm_node_registration_status_msg_t *
 		pack32(msg->hash_val, buffer);
 		pack32(msg->cpu_load, buffer);
 		pack64(msg->free_mem, buffer);
+		pack16(msg->has_nvram, buffer);					// NEXTGenIO
+		pack32(msg->nvram_capacity, buffer);			// NEXTGenIO
+		pack32(msg->nvram_memory_capacity, buffer);		// NEXTGenIO
+		pack32(msg->nvram_appdirect_capacity, buffer);	// NEXTGenIO
+		pack16(msg->nvram_number_of_namespaces, buffer);// NEXTGenIO
 
 		pack32(msg->job_count, buffer);
 		for (i = 0; i < msg->job_count; i++) {
@@ -3471,6 +3476,11 @@ _unpack_node_registration_status_msg(slurm_node_registration_status_msg_t
 		safe_unpack32(&node_reg_ptr->hash_val, buffer);
 		safe_unpack32(&node_reg_ptr->cpu_load, buffer);
 		safe_unpack64(&node_reg_ptr->free_mem, buffer);
+		safe_unpack16(&node_reg_ptr->has_nvram, buffer);					// NEXTGenIO
+		safe_unpack32(&node_reg_ptr->nvram_capacity, buffer);				// NEXTGenIO
+		safe_unpack32(&node_reg_ptr->nvram_memory_capacity, buffer);		// NEXTGenIO
+		safe_unpack32(&node_reg_ptr->nvram_appdirect_capacity, buffer);		// NEXTGenIO
+		safe_unpack16(&node_reg_ptr->nvram_number_of_namespaces, buffer);	// NEXTGenIO
 
 		safe_unpack32(&node_reg_ptr->job_count, buffer);
 		if (node_reg_ptr->job_count > NO_VAL)
@@ -4011,6 +4021,11 @@ _unpack_node_info_members(node_info_t * node, Buf buffer,
 
 		safe_unpackstr_xmalloc(&node->tres_fmt_str, &uint32_tmp,
 				       buffer);
+
+		safe_unpack32(&node->nvram_capacity, buffer);			// NEXTGenIO
+		safe_unpack32(&node->nvram_memory_capacity, buffer);	// NEXTGenIO
+		safe_unpack32(&node->nvram_appdirect_capacity, buffer);	// NEXTGenIO
+		safe_unpack16(&node->nvram_number_of_namespaces, buffer);// NEXTGenIO
 	} else if (protocol_version >= SLURM_MIN_PROTOCOL_VERSION) {
 		safe_unpackstr_xmalloc(&node->name, &uint32_tmp, buffer);
 		safe_unpackstr_xmalloc(&node->node_hostname, &uint32_tmp,
@@ -4715,6 +4730,13 @@ pack_job_step_create_request_msg(job_step_create_request_msg_t * msg,
 		packstr(msg->tres_per_node, buffer);
 		packstr(msg->tres_per_socket, buffer);
 		packstr(msg->tres_per_task, buffer);
+		// NEXTGenIO
+		packstr(msg->filesystem_device, buffer);
+		packstr(msg->filesystem_type, buffer);
+		packstr(msg->filesystem_mountpoint, buffer);
+		packstr(msg->filesystem_size, buffer);
+		packstr(msg->service_type, buffer);
+		pack8(msg->optimise_for_energy, buffer);
 	} else if (protocol_version >= SLURM_17_11_PROTOCOL_VERSION) {
 		pack32(msg->job_id, buffer);
 		pack32(msg->step_id, buffer);
@@ -4857,6 +4879,18 @@ unpack_job_step_create_request_msg(job_step_create_request_msg_t ** msg,
 				       buffer);
 		safe_unpackstr_xmalloc(&tmp_ptr->tres_per_task, &uint32_tmp,
 				       buffer);
+		// NEXTGenIO
+		safe_unpackstr_xmalloc(&tmp_ptr->filesystem_device, &uint32_tmp,
+					   buffer);
+		safe_unpackstr_xmalloc(&tmp_ptr->filesystem_type, &uint32_tmp,
+				       buffer);
+		safe_unpackstr_xmalloc(&tmp_ptr->filesystem_mountpoint, &uint32_tmp,
+				       buffer);
+		safe_unpackstr_xmalloc(&tmp_ptr->filesystem_size, &uint32_tmp,
+				       buffer);
+		safe_unpackstr_xmalloc(&tmp_ptr->service_type, &uint32_tmp,
+				       buffer);
+		safe_unpack8(&tmp_ptr->optimise_for_energy, buffer);
 	} else if (protocol_version >= SLURM_17_11_PROTOCOL_VERSION) {
 		safe_unpack32(&tmp_ptr->job_id, buffer);
 		safe_unpack32(&tmp_ptr->step_id, buffer);
@@ -4969,6 +5003,11 @@ _pack_kill_job_msg(kill_job_msg_t * msg, Buf buffer, uint16_t protocol_version)
 		pack_time(msg->start_time, buffer);
 		pack32(msg->step_id,  buffer);
 		pack_time(msg->time, buffer);
+		packstr(msg->filesystem_type, buffer);			// NEXTGenIO
+		packstr(msg->filesystem_mountpoint, buffer);	// NEXTGenIO
+		packstr(msg->filesystem_device, buffer);		// NEXTGenIO
+		packstr(msg->service_type, buffer);				// NEXTGenIO
+		pack8(msg->optimise_for_energy, buffer);		// NEXTGenIO
 	} else if (protocol_version >= SLURM_17_11_PROTOCOL_VERSION) {
 		pack32(msg->job_id,  buffer);
 		pack32(msg->job_state, buffer);
@@ -5027,6 +5066,15 @@ _unpack_kill_job_msg(kill_job_msg_t ** msg, Buf buffer,
 		safe_unpack_time(&(tmp_ptr->start_time), buffer);
 		safe_unpack32(&(tmp_ptr->step_id),  buffer);
 		safe_unpack_time(&(tmp_ptr->time), buffer);
+		safe_unpackstr_xmalloc(&(tmp_ptr->filesystem_type),
+						       &uint32_tmp, buffer);		// NEXTGenIO
+		safe_unpackstr_xmalloc(&(tmp_ptr->filesystem_mountpoint),
+						       &uint32_tmp, buffer);		// NEXTGenIO
+		safe_unpackstr_xmalloc(&(tmp_ptr->filesystem_device),
+						       &uint32_tmp, buffer);		// NEXTGenIO
+		safe_unpackstr_xmalloc(&(tmp_ptr->service_type),
+						       &uint32_tmp, buffer);		// NEXTGenIO
+		safe_unpack8(&tmp_ptr->optimise_for_energy, buffer);
 	} else if (protocol_version >= SLURM_17_11_PROTOCOL_VERSION) {
 		safe_unpack32(&(tmp_ptr->job_id),  buffer);
 		safe_unpack32(&(tmp_ptr->job_state),  buffer);
@@ -5796,6 +5844,18 @@ _unpack_job_step_info_members(job_step_info_t * step, Buf buffer,
 				       &uint32_tmp, buffer);
 		safe_unpackstr_xmalloc(&step->tres_per_task,
 				       &uint32_tmp, buffer);
+		// NEXTGenIO
+		safe_unpackstr_xmalloc(&step->filesystem_device,
+							   &uint32_tmp, buffer);
+		safe_unpackstr_xmalloc(&step->filesystem_type,
+					   &uint32_tmp, buffer);
+		safe_unpackstr_xmalloc(&step->filesystem_mountpoint,
+						&uint32_tmp, buffer);
+		safe_unpackstr_xmalloc(&step->filesystem_size,
+					   &uint32_tmp, buffer);
+		safe_unpackstr_xmalloc(&step->service_type,
+					   &uint32_tmp, buffer);
+		safe_unpack8(&step->optimise_for_energy, buffer);
 	} else if (protocol_version >= SLURM_17_11_PROTOCOL_VERSION) {
 		safe_unpack32(&step->array_job_id, buffer);
 		safe_unpack32(&step->array_task_id, buffer);
@@ -6159,6 +6219,28 @@ _unpack_job_info_members(job_info_t * job, Buf buffer,
 		safe_unpackstr_xmalloc(&job->state_desc, &uint32_tmp, buffer);
 		safe_unpackstr_xmalloc(&job->resv_name,  &uint32_tmp, buffer);
 		safe_unpackstr_xmalloc(&job->mcs_label,  &uint32_tmp, buffer);
+
+		/* NEXTGenIO */
+		safe_unpack32(&job->workflow_id, buffer);
+		safe_unpack16(&job->workflow_start, buffer);
+		safe_unpackstr_xmalloc(&job->workflow_prior_dependency,
+						&uint32_tmp, buffer);
+		safe_unpackstr_xmalloc(&job->workflow_post_dependency,
+						&uint32_tmp, buffer);
+		safe_unpack16(&job->workflow_end, buffer);
+		safe_unpackstr_xmalloc(&job->filesystem_device,
+						&uint32_tmp, buffer);
+		safe_unpackstr_xmalloc(&job->filesystem_type,
+						&uint32_tmp, buffer);
+		safe_unpackstr_xmalloc(&job->filesystem_mountpoint,
+						&uint32_tmp, buffer);
+		safe_unpackstr_xmalloc(&job->filesystem_size,
+						&uint32_tmp, buffer);
+		safe_unpackstr_xmalloc(&job->service_type,
+						&uint32_tmp, buffer);
+		safe_unpack8(&job->optimise_for_energy, buffer);
+		safe_unpack16(&job->nvram_mode, buffer);
+		safe_unpack32(&job->nvram_size, buffer);
 
 		safe_unpack32(&job->exit_code, buffer);
 		safe_unpack32(&job->derived_ec, buffer);
@@ -6655,6 +6737,7 @@ _pack_slurm_ctl_conf_msg(slurm_ctl_conf_info_msg_t * build_ptr, Buf buffer,
 
 		packstr(build_ptr->acct_gather_energy_type, buffer);
 		packstr(build_ptr->acct_gather_filesystem_type, buffer);
+		packstr(build_ptr->acct_gather_nvram_type, buffer);		// NEXTGenIO
 		packstr(build_ptr->acct_gather_interconnect_type, buffer);
 		pack16(build_ptr->acct_gather_node_freq, buffer);
 		packstr(build_ptr->acct_gather_profile_type, buffer);
@@ -6699,6 +6782,10 @@ _pack_slurm_ctl_conf_msg(slurm_ctl_conf_info_msg_t * build_ptr, Buf buffer,
 
 		pack16(build_ptr->fast_schedule, buffer);
 		packstr(build_ptr->fed_params, buffer);
+		packstr(build_ptr->filesystem_devices, buffer);		// NEXTGenIO
+		packstr(build_ptr->filesystem_types, buffer);		// NEXTGenIO
+		packstr(build_ptr->filesystem_mountpoints, buffer);	// NEXTGenIO
+		packstr(build_ptr->filesystem_sizes, buffer);		// NEXTGenIO
 		pack32(build_ptr->first_job_id, buffer);
 		pack16(build_ptr->fs_dampening_factor, buffer);
 
@@ -6761,6 +6848,7 @@ _pack_slurm_ctl_conf_msg(slurm_ctl_conf_info_msg_t * build_ptr, Buf buffer,
 		packstr(build_ptr->mcs_plugin_params, buffer);
 
 		pack16(build_ptr->mem_limit_enforce, buffer);
+		packstr(build_ptr->metascheduler, buffer);			// NEXTGenIO
 		pack32(build_ptr->min_job_age, buffer);
 		packstr(build_ptr->mpi_default, buffer);
 		packstr(build_ptr->mpi_params, buffer);
@@ -6836,6 +6924,7 @@ _pack_slurm_ctl_conf_msg(slurm_ctl_conf_info_msg_t * build_ptr, Buf buffer,
 				   protocol_version, buffer);
 
 		pack16(build_ptr->select_type_param, buffer);
+		packstr(build_ptr->service_types, buffer);		// NEXTGenIO
 
 		packstr(build_ptr->slurm_conf, buffer);
 		pack32(build_ptr->slurm_user_id, buffer);
@@ -7456,6 +7545,8 @@ _unpack_slurm_ctl_conf_msg(slurm_ctl_conf_info_msg_t **build_buffer_ptr,
 				       &uint32_tmp, buffer);
 		safe_unpackstr_xmalloc(&build_ptr->acct_gather_filesystem_type,
 				       &uint32_tmp, buffer);
+		safe_unpackstr_xmalloc(&build_ptr->acct_gather_nvram_type,
+					   &uint32_tmp, buffer);		// NEXTGenIO
 		safe_unpackstr_xmalloc(&build_ptr->acct_gather_interconnect_type,
 				       &uint32_tmp, buffer);
 		safe_unpack16(&build_ptr->acct_gather_node_freq, buffer);
@@ -7518,6 +7609,14 @@ _unpack_slurm_ctl_conf_msg(slurm_ctl_conf_info_msg_t **build_buffer_ptr,
 		safe_unpack16(&build_ptr->fast_schedule, buffer);
 		safe_unpackstr_xmalloc(&build_ptr->fed_params, &uint32_tmp,
 				       buffer);
+		safe_unpackstr_xmalloc(&build_ptr->filesystem_devices,
+							   &uint32_tmp, buffer);			// NEXTGenIO
+		safe_unpackstr_xmalloc(&build_ptr->filesystem_types,
+						       &uint32_tmp, buffer);			// NEXTGenIO
+		safe_unpackstr_xmalloc(&build_ptr->filesystem_mountpoints,
+						       &uint32_tmp, buffer);			// NEXTGenIO
+		safe_unpackstr_xmalloc(&build_ptr->filesystem_sizes,
+						       &uint32_tmp, buffer);			// NEXTGenIO
 		safe_unpack32(&build_ptr->first_job_id, buffer);
 		safe_unpack16(&build_ptr->fs_dampening_factor, buffer);
 
@@ -7603,6 +7702,8 @@ _unpack_slurm_ctl_conf_msg(slurm_ctl_conf_info_msg_t **build_buffer_ptr,
 		safe_unpackstr_xmalloc(&build_ptr->mcs_plugin_params,
 				       &uint32_tmp, buffer);
 		safe_unpack16(&build_ptr->mem_limit_enforce, buffer);
+		safe_unpackstr_xmalloc(&build_ptr->metascheduler,
+						       &uint32_tmp, buffer);		// NEXTGenIO
 		safe_unpack32(&build_ptr->min_job_age, buffer);
 		safe_unpackstr_xmalloc(&build_ptr->mpi_default,
 				       &uint32_tmp, buffer);
@@ -7718,6 +7819,9 @@ _unpack_slurm_ctl_conf_msg(slurm_ctl_conf_info_msg_t **build_buffer_ptr,
 			goto unpack_error;
 
 		safe_unpack16(&build_ptr->select_type_param, buffer);
+
+		safe_unpackstr_xmalloc(&build_ptr->service_types,
+						       &uint32_tmp, buffer);		// NEXTGenIO
 
 		safe_unpackstr_xmalloc(&build_ptr->slurm_conf,
 				       &uint32_tmp, buffer);
@@ -8846,6 +8950,21 @@ _pack_job_desc_msg(job_desc_msg_t * job_desc_ptr, Buf buffer,
 		pack_time(job_desc_ptr->end_time, buffer);
 		pack_time(job_desc_ptr->deadline, buffer);
 
+		/* NEXTGenIO */
+		pack32(job_desc_ptr->workflow_id, buffer);
+		pack16(job_desc_ptr->workflow_start, buffer);
+		packstr(job_desc_ptr->workflow_prior_dependency, buffer);
+		packstr(job_desc_ptr->workflow_post_dependency, buffer);
+		pack16(job_desc_ptr->workflow_end, buffer);
+		packstr(job_desc_ptr->filesystem_device, buffer);
+		packstr(job_desc_ptr->filesystem_type, buffer);
+		packstr(job_desc_ptr->filesystem_mountpoint, buffer);
+		packstr(job_desc_ptr->filesystem_size, buffer);
+		packstr(job_desc_ptr->service_type, buffer);
+		pack8(job_desc_ptr->optimise_for_energy, buffer);
+		pack16(job_desc_ptr->nvram_mode, buffer);
+		pack32(job_desc_ptr->nvram_size, buffer);
+
 		packstr(job_desc_ptr->licenses, buffer);
 		pack16(job_desc_ptr->mail_type, buffer);
 		packstr(job_desc_ptr->mail_user, buffer);
@@ -9301,6 +9420,28 @@ _unpack_job_desc_msg(job_desc_msg_t ** job_desc_buffer_ptr, Buf buffer,
 		safe_unpack_time(&job_desc_ptr->begin_time, buffer);
 		safe_unpack_time(&job_desc_ptr->end_time, buffer);
 		safe_unpack_time(&job_desc_ptr->deadline, buffer);
+
+		/* NEXTGenIO */
+		safe_unpack32(&job_desc_ptr->workflow_id, buffer);
+		safe_unpack16(&job_desc_ptr->workflow_start, buffer);
+		safe_unpackstr_xmalloc(&job_desc_ptr->workflow_prior_dependency,
+						&uint32_tmp, buffer);
+		safe_unpackstr_xmalloc(&job_desc_ptr->workflow_post_dependency,
+						&uint32_tmp, buffer);
+		safe_unpack16(&job_desc_ptr->workflow_end, buffer);
+		safe_unpackstr_xmalloc(&job_desc_ptr->filesystem_device,
+						&uint32_tmp, buffer);
+		safe_unpackstr_xmalloc(&job_desc_ptr->filesystem_type,
+						&uint32_tmp, buffer);
+		safe_unpackstr_xmalloc(&job_desc_ptr->filesystem_mountpoint,
+						&uint32_tmp, buffer);
+		safe_unpackstr_xmalloc(&job_desc_ptr->filesystem_size,
+						&uint32_tmp, buffer);
+		safe_unpackstr_xmalloc(&job_desc_ptr->service_type,
+						&uint32_tmp, buffer);
+		safe_unpack8(&job_desc_ptr->optimise_for_energy, buffer);
+		safe_unpack16(&job_desc_ptr->nvram_mode, buffer);
+		safe_unpack32(&job_desc_ptr->nvram_size, buffer);
 
 		safe_unpackstr_xmalloc(&job_desc_ptr->licenses,
 				       &uint32_tmp, buffer);
@@ -10463,6 +10604,14 @@ _pack_launch_tasks_request_msg(launch_tasks_request_msg_t * msg, Buf buffer,
 		packstr(msg->x11_magic_cookie, buffer);
 		packstr(msg->x11_target_host, buffer);
 		pack16(msg->x11_target_port, buffer);
+
+		// NEXTGenIO
+		packstr(msg->filesystem_device, buffer);
+		packstr(msg->filesystem_type, buffer);
+		packstr(msg->filesystem_mountpoint, buffer);
+		packstr(msg->filesystem_size, buffer);
+		packstr(msg->service_type, buffer);
+		pack8(msg->optimise_for_energy, buffer);
 	} else if (protocol_version >= SLURM_17_11_PROTOCOL_VERSION) {
 		pack32(msg->job_id, buffer);
 		pack32(msg->job_step_id, buffer);
@@ -10782,6 +10931,19 @@ _unpack_launch_tasks_request_msg(launch_tasks_request_msg_t **
 		safe_unpackstr_xmalloc(&msg->x11_target_host, &uint32_tmp,
 				       buffer);
 		safe_unpack16(&msg->x11_target_port, buffer);
+
+		// NEXTGenIO
+		safe_unpackstr_xmalloc(&msg->filesystem_device, &uint32_tmp,
+					   buffer);
+		safe_unpackstr_xmalloc(&msg->filesystem_type, &uint32_tmp,
+					   buffer);
+		safe_unpackstr_xmalloc(&msg->filesystem_mountpoint, &uint32_tmp,
+					   buffer);
+		safe_unpackstr_xmalloc(&msg->filesystem_size, &uint32_tmp,
+					   buffer);
+		safe_unpackstr_xmalloc(&msg->service_type, &uint32_tmp,
+					   buffer);
+		safe_unpack8(&msg->optimise_for_energy, buffer);
 	} else if (protocol_version >= SLURM_17_11_PROTOCOL_VERSION) {
 		safe_unpack32(&msg->job_id, buffer);
 		safe_unpack32(&msg->job_step_id, buffer);
@@ -11481,6 +11643,14 @@ _pack_prolog_launch_msg(
 		packstr(msg->x11_target_host, buffer);
 		pack16(msg->x11_target_port, buffer);
 
+		// NEXTGenIO
+		packstr(msg->filesystem_type, buffer);
+		packstr(msg->filesystem_device, buffer);
+		packstr(msg->filesystem_mountpoint, buffer);
+		packstr(msg->filesystem_size, buffer);
+		packstr(msg->service_type, buffer);
+		pack8(msg->optimise_for_energy, buffer);
+
 		packstr_array(msg->spank_job_env, msg->spank_job_env_size,
 			      buffer);
 		slurm_cred_pack(msg->cred, buffer, protocol_version);
@@ -11563,6 +11733,19 @@ _unpack_prolog_launch_msg(
 		safe_unpackstr_xmalloc(&launch_msg_ptr->x11_target_host,
 				       &uint32_tmp, buffer);
 		safe_unpack16(&launch_msg_ptr->x11_target_port, buffer);
+
+		// NEXTGenIO
+		safe_unpackstr_xmalloc(&launch_msg_ptr->filesystem_type,
+				&uint32_tmp, buffer);
+		safe_unpackstr_xmalloc(&launch_msg_ptr->filesystem_device,
+						&uint32_tmp, buffer);
+		safe_unpackstr_xmalloc(&launch_msg_ptr->filesystem_mountpoint,
+						&uint32_tmp, buffer);
+		safe_unpackstr_xmalloc(&launch_msg_ptr->filesystem_size,
+						&uint32_tmp, buffer);
+		safe_unpackstr_xmalloc(&launch_msg_ptr->service_type,
+						&uint32_tmp, buffer);
+		safe_unpack8(&launch_msg_ptr->optimise_for_energy, buffer);
 
 		safe_unpackstr_array(&launch_msg_ptr->spank_job_env,
 				     &launch_msg_ptr->spank_job_env_size,
@@ -12597,6 +12780,14 @@ _pack_batch_job_launch_msg(batch_job_launch_msg_t * msg, Buf buffer,
 		pack32(msg->profile, buffer);
 		packstr(msg->tres_bind, buffer);
 		packstr(msg->tres_freq, buffer);
+
+		// NEXTGenIO
+		packstr(msg->filesystem_device, buffer);
+		packstr(msg->filesystem_type, buffer);
+		packstr(msg->filesystem_mountpoint, buffer);
+		packstr(msg->filesystem_size, buffer);
+		packstr(msg->service_type, buffer);
+		pack8(msg->optimise_for_energy, buffer);
 	} else if (protocol_version >= SLURM_17_11_PROTOCOL_VERSION) {
 		pack32(msg->job_id, buffer);
 		pack32(msg->step_id, buffer);
@@ -12845,6 +13036,18 @@ _unpack_batch_job_launch_msg(batch_job_launch_msg_t ** msg, Buf buffer,
 				       buffer);
 		safe_unpackstr_xmalloc(&launch_msg_ptr->tres_freq, &uint32_tmp,
 				       buffer);
+		// NEXTGenIO
+		safe_unpackstr_xmalloc(&launch_msg_ptr->filesystem_device, &uint32_tmp,
+					   buffer);
+		safe_unpackstr_xmalloc(&launch_msg_ptr->filesystem_type, &uint32_tmp,
+				       buffer);
+		safe_unpackstr_xmalloc(&launch_msg_ptr->filesystem_mountpoint, &uint32_tmp,
+				       buffer);
+		safe_unpackstr_xmalloc(&launch_msg_ptr->filesystem_size, &uint32_tmp,
+				       buffer);
+		safe_unpackstr_xmalloc(&launch_msg_ptr->service_type, &uint32_tmp,
+				       buffer);
+		safe_unpack8(&launch_msg_ptr->optimise_for_energy, buffer);
 	} else if (protocol_version >= SLURM_17_11_PROTOCOL_VERSION) {
 		safe_unpack32(&launch_msg_ptr->job_id, buffer);
 		safe_unpack32(&launch_msg_ptr->step_id, buffer);

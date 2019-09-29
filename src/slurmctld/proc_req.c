@@ -701,6 +701,8 @@ static void _fill_ctld_conf(slurm_ctl_conf_t * conf_ptr)
 		xstrdup(conf->acct_gather_energy_type);
 	conf_ptr->acct_gather_filesystem_type =
 		xstrdup(conf->acct_gather_filesystem_type);
+	conf_ptr->acct_gather_nvram_type =
+		xstrdup(conf->acct_gather_nvram_type);		// NEXTGenIO
 	conf_ptr->acct_gather_interconnect_type =
 		xstrdup(conf->acct_gather_interconnect_type);
 	conf_ptr->acct_gather_profile_type =
@@ -751,6 +753,10 @@ static void _fill_ctld_conf(slurm_ctl_conf_t * conf_ptr)
 
 	conf_ptr->fast_schedule       = conf->fast_schedule;
 	conf_ptr->fed_params          = xstrdup(conf->fed_params);
+	conf_ptr->filesystem_devices  = xstrdup(conf->filesystem_devices);			// NEXTGenIO
+	conf_ptr->filesystem_types    = xstrdup(conf->filesystem_types);  			// NEXTGenIO
+	conf_ptr->filesystem_mountpoints = xstrdup(conf->filesystem_mountpoints);	// NEXTGenIO
+	conf_ptr->filesystem_sizes    = xstrdup(conf->filesystem_sizes);			// NEXTGenIO
 	conf_ptr->first_job_id        = conf->first_job_id;
 	conf_ptr->fs_dampening_factor = conf->fs_dampening_factor;
 
@@ -811,6 +817,7 @@ static void _fill_ctld_conf(slurm_ctl_conf_t * conf_ptr)
 	conf_ptr->mcs_plugin          = xstrdup(conf->mcs_plugin);
 	conf_ptr->mcs_plugin_params   = xstrdup(conf->mcs_plugin_params);
 	conf_ptr->mem_limit_enforce   = conf->mem_limit_enforce;
+	conf_ptr->metascheduler       = xstrdup(conf->metascheduler);			// NEXTGenIO
 	conf_ptr->min_job_age         = conf->min_job_age;
 	conf_ptr->mpi_default         = xstrdup(conf->mpi_default);
 	conf_ptr->mpi_params          = xstrdup(conf->mpi_params);
@@ -880,6 +887,7 @@ static void _fill_ctld_conf(slurm_ctl_conf_t * conf_ptr)
 	conf_ptr->sched_log_level     = conf->sched_log_level;
 	conf_ptr->sched_time_slice    = conf->sched_time_slice;
 	conf_ptr->schedtype           = xstrdup(conf->schedtype);
+	conf_ptr->service_types       = xstrdup(conf->service_types);		// NEXTGenIO
 	conf_ptr->select_type         = xstrdup(conf->select_type);
 	select_g_get_info_from_plugin(SELECT_CONFIG_INFO, NULL,
 				      &conf_ptr->select_conf_key_pairs);

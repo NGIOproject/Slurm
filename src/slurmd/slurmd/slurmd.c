@@ -113,6 +113,7 @@
 #include "src/slurmd/slurmd/slurmd.h"
 #include "src/slurmd/common/slurmd_cgroup.h"
 #include "src/slurmd/common/xcpuinfo.h"
+#include "src/slurmd/common/slurmd_nvram.h"
 
 #define GETOPT_ARGS	"bcCd:Df:hL:Mn:N:vV"
 
@@ -705,6 +706,11 @@ _fill_registration_msg(slurm_node_registration_status_msg_t *msg)
 	msg->hash_val    = slurm_get_hash_val();
 	get_cpu_load(&msg->cpu_load);
 	get_free_mem(&msg->free_mem);
+	get_nvram_availability(&msg->has_nvram);	// NEXTGenIO
+	if ( msg->has_nvram == 1 ) {
+		get_nvram_memory(&msg->nvram_capacity, &msg->nvram_memory_capacity, &msg->nvram_appdirect_capacity, true);	// NEXTGenIO
+	}
+	get_namespaces(&msg->nvram_number_of_namespaces);
 
 	gres_info = init_buf(1024);
 	if (gres_plugin_node_config_pack(gres_info) != SLURM_SUCCESS)
@@ -910,6 +916,12 @@ _read_config(void)
 	xfree(conf->block_map);
 	xfree(conf->block_map_inv);
 
+	get_nvram_availability(&conf->has_nvram);	// NEXTGenIO
+	if ( conf->has_nvram == 1 ) {
+		get_nvram_memory(&conf->nvram_capacity, &conf->nvram_memory_capacity, &conf->nvram_appdirect_capacity, false);	// NEXTGenIO
+	}
+	get_namespaces(&conf->nvram_number_of_namespaces);
+
 	/*
 	 * This must be reset before _update_logging(), otherwise the
 	 * slurmstepd processes will not get the reconfigure request,
@@ -1056,6 +1068,8 @@ _read_config(void)
 		      xstrdup(cf->acct_gather_energy_type));
 	_free_and_set(conf->acct_gather_filesystem_type,
 		      xstrdup(cf->acct_gather_filesystem_type));
+	_free_and_set(conf->acct_gather_nvram_type,
+			      xstrdup(cf->acct_gather_nvram_type));
 	_free_and_set(conf->acct_gather_interconnect_type,
 		      xstrdup(cf->acct_gather_interconnect_type));
 	_free_and_set(conf->acct_gather_profile_type,
@@ -1210,6 +1224,9 @@ _print_conf(void)
 	secs2time_str((time_t)conf->up_time, time_str, sizeof(time_str));
 	debug3("UpTime      = %u = %s", conf->up_time, time_str);
 
+	debug3("NVRAM       = %1u (Total:%u, Memory Capacity:%u, AppDirect Capacity:%u)",
+			conf->has_nvram, conf->nvram_capacity, conf->nvram_memory_capacity, conf->nvram_appdirect_capacity);	// NEXTGenIO
+
 	for (i = 0; i < conf->block_map_size; i++)
 		xstrfmtcat(str, "%s%u", (str ? "," : ""),
 			   conf->block_map[i]);
@@ -1280,6 +1297,7 @@ _destroy_conf(void)
 	if (conf) {
 		xfree(conf->acct_gather_energy_type);
 		xfree(conf->acct_gather_filesystem_type);
+		xfree(conf->acct_gather_nvram_type);		// NEXTGenIO
 		xfree(conf->acct_gather_interconnect_type);
 		xfree(conf->acct_gather_profile_type);
 		xfree(conf->auth_info);
@@ -1363,6 +1381,19 @@ _print_config(void)
 	hours = (conf->up_time / 3600) % 24;
 	days  = (conf->up_time / 86400);
 	printf("UpTime=%u-%2.2u:%2.2u:%2.2u\n", days, hours, mins, secs);
+
+	get_nvram_availability(&conf->has_nvram);	// NEXTGenIO
+	if ( conf->has_nvram == 1 ) {
+		get_nvram_memory(&conf->nvram_capacity, &conf->nvram_memory_capacity, &conf->nvram_appdirect_capacity, false);	// NEXTGenIO
+	}
+	get_namespaces(&conf->nvram_number_of_namespaces);
+	printf("NVRAM=%u (Total:%u, Memory Capacity:%u, AppDirect Capacity:%u)",
+			conf->has_nvram, conf->nvram_capacity, conf->nvram_memory_capacity, conf->nvram_appdirect_capacity);	// NEXTGenIO
+	printf("Number of Partitions=%u", conf->nvram_number_of_namespaces);	// NEXTGenIO
+
+	fini_system_nvram();
+	xfree(conf->block_map);	xfree(conf->block_map_inv);
+	log_fini(); _destroy_conf();
 }
 
 static void
@@ -1770,6 +1801,7 @@ _slurmd_fini(void)
 	job_container_fini();
 	acct_gather_conf_destroy();
 	fini_system_cgroup();
+	fini_system_nvram();	// NEXTGenIO
 	route_fini();
 	xcpuinfo_fini();
 	slurm_mutex_lock(&fini_job_mutex);

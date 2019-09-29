@@ -196,6 +196,17 @@ enum wrappers {
 #define LONG_OPT_GPUS_PER_SOCKET 0x177
 #define LONG_OPT_GPUS_PER_TASK   0x178
 #define LONG_OPT_MEM_PER_GPU     0x179
+#define LONG_OPT_WORKFLOW_START  0x180				// NEXTGenIO
+#define LONG_OPT_WORKFLOW_PRIOR_DEPENDENCY 0x181	// NEXTGenIO
+#define LONG_OPT_WORKFLOW_END    0x182				// NEXTGenIO
+#define LONG_OPT_FILESYSTEM_DEVICE 0x183			// NEXTGenIO
+#define LONG_OPT_FILESYSTEM_TYPE 0x184				// NEXTGenIO
+#define LONG_OPT_FILESYSTEM_MOUNT 0x185				// NEXTGenIO
+#define LONG_OPT_FILESYSTEM_SIZE 0x186				// NEXTGenIO
+#define LONG_OPT_SERVICE_TYPE    0x187				// NEXTGenIO
+#define LONG_OPT_NVRAM_OPTIONS   0x188				// NEXTGenIO
+#define LONG_OPT_MAP_JSON        0x189				// NEXTGenIO
+#define LONG_OPT_OPTIMISE_FOR_ENERGY 0x190			// NEXTGenIO
 
 /*---- global variables, defined in opt.h ----*/
 slurm_opt_t opt;
@@ -204,6 +215,7 @@ sbatch_env_t pack_env;
 int   error_exit = 1;
 int   ignore_pbs = 0;
 bool  is_pack_job = false;
+char *	_hint_type = NULL;
 
 /*---- forward declarations of static functions  ----*/
 
@@ -426,6 +438,24 @@ static void _opt_default(bool first_pass)
 	opt.threads_per_core		= NO_VAL; /* requested threads */
 	opt.threads_per_core_set	= false;
 	opt.wait4switch			= -1;
+	/* NEXTGenIO */
+	opt.workflow_id		= NO_VAL;
+	opt.workflow_start	= false;
+	xfree(opt.workflow_prior_dependency);
+	xfree(opt.workflow_post_dependency);
+	opt.workflow_end	= false;
+	xfree(opt.filesystem_device);
+	xfree(opt.filesystem_type);
+	xfree(opt.filesystem_mountpoint);
+	xfree(opt.filesystem_size);
+	xfree(opt.service_type);
+	xfree(opt.nvram_options);
+	xfree(opt.map_json);
+	opt.nvram_mode = NO_VAL16;
+	opt.nvram_size = NO_VAL;
+	xfree(opt.map_json);
+	opt.optimise_for_energy = false;
+	xfree(_hint_type);
 }
 
 /* Read specified file's contents into a buffer.
@@ -502,6 +532,7 @@ env_vars_t env_vars[] = {
   {"SBATCH_DISTRIBUTION",  OPT_DISTRIB ,   NULL,               NULL          },
   {"SBATCH_EXCLUSIVE",     OPT_EXCLUSIVE,  NULL,               NULL          },
   {"SBATCH_EXPORT",        OPT_STRING,     &sbopt.export_env,  NULL          },
+  {"SLURM_FILESYSTEM_MOUNT", OPT_STRING,   &sbopt.filesystem_mountpoint,  NULL },
   {"SBATCH_GET_USER_ENV",  OPT_GET_USER_ENV, NULL,             NULL          },
   {"SBATCH_GRES",          OPT_STRING,     &opt.gres,          NULL          },
   {"SBATCH_GRES_FLAGS",    OPT_GRES_FLAGS, NULL,               NULL          },
@@ -883,6 +914,17 @@ static struct option long_options[] = {
 #ifdef WITH_SLURM_X11
 	{"x11",           optional_argument, 0, LONG_OPT_X11},
 #endif
+	{"workflow-start",optional_argument, 0, LONG_OPT_WORKFLOW_START},			// NEXTGenIO
+	{"workflow-prior-dependency",optional_argument, 0, LONG_OPT_WORKFLOW_PRIOR_DEPENDENCY},	// NEXTGenIO
+	{"workflow-end",  optional_argument, 0, LONG_OPT_WORKFLOW_END},				// NEXTGenIO
+	{"filesystem-device",optional_argument, 0, LONG_OPT_FILESYSTEM_DEVICE},		// NEXTGenIO
+	{"filesystem-type",optional_argument, 0, LONG_OPT_FILESYSTEM_TYPE},			// NEXTGenIO
+	{"filesystem-mountpoint",optional_argument, 0, LONG_OPT_FILESYSTEM_MOUNT},	// NEXTGenIO
+	{"filesystem-size",optional_argument, 0, LONG_OPT_FILESYSTEM_SIZE},			// NEXTGenIO
+	{"service-type",  optional_argument, 0, LONG_OPT_SERVICE_TYPE},				// NEXTGenIO
+	{"nvram-options", optional_argument, 0, LONG_OPT_NVRAM_OPTIONS},			// NEXTGenIO
+	{"map-json", optional_argument,      0, LONG_OPT_MAP_JSON},					// NEXTGenIO
+	{"optimise-for-energy", optional_argument, 0, LONG_OPT_OPTIMISE_FOR_ENERGY}, // NEXTGenIO
 	{NULL,            0,                 0, 0}
 };
 
@@ -1954,6 +1996,7 @@ static void _set_options(int argc, char **argv)
 					NULL)) {
 				exit(error_exit);
 			}
+			_hint_type = xstrdup(optarg);
 			opt.hint_set = true;
 			opt.ntasks_per_core_set = true;
 			opt.threads_per_core_set = true;
@@ -2141,6 +2184,94 @@ static void _set_options(int argc, char **argv)
 				opt.x11 = x11_str2flags(optarg);
 			else
 				opt.x11 = X11_FORWARD_BATCH;
+			break;
+		case LONG_OPT_WORKFLOW_START:
+			opt.workflow_start = true;
+			break;
+		case LONG_OPT_WORKFLOW_PRIOR_DEPENDENCY:
+			xfree(opt.workflow_prior_dependency);
+			opt.workflow_prior_dependency = xstrdup(optarg);
+			break;
+		case LONG_OPT_WORKFLOW_END:
+			opt.workflow_end = true;
+			break;
+		case LONG_OPT_FILESYSTEM_DEVICE:
+			if (!optarg)
+				break;	/* Fix for Coverity false positive */
+			if (verify_filesystem_device(optarg)) {
+				exit(error_exit);
+			}
+			xfree(opt.filesystem_device);
+			opt.filesystem_device = xstrdup(optarg);
+			break;
+		case LONG_OPT_FILESYSTEM_TYPE:
+			if (!optarg)
+				break;	/* Fix for Coverity false positive */
+			if (verify_filesystem_type(optarg)) {
+				exit(error_exit);
+			}
+			xfree(opt.filesystem_type);
+			opt.filesystem_type = xstrdup(optarg);
+			break;
+		case LONG_OPT_FILESYSTEM_MOUNT:
+			if (!optarg)
+				break;	/* Fix for Coverity false positive */
+			if (verify_filesystem_mountpoint(optarg, opt.uid)) {
+				exit(error_exit);
+			}
+			xfree(opt.filesystem_mountpoint);
+			opt.filesystem_mountpoint = xstrdup(optarg);
+			break;
+		case LONG_OPT_FILESYSTEM_SIZE:
+			if (!optarg)
+				break;	/* Fix for Coverity false positive */
+			if (verify_filesystem_size(optarg)) {
+				exit(error_exit);
+			}
+			xfree(opt.filesystem_size);
+			opt.filesystem_size = xstrdup(optarg);
+			break;
+		case LONG_OPT_SERVICE_TYPE:
+			if (!optarg)
+				break;	/* Fix for Coverity false positive */
+			if (verify_service_type(optarg)) {
+				exit(error_exit);
+			}
+			xfree(opt.service_type);
+			opt.service_type = xstrdup(optarg);
+			break;
+		case LONG_OPT_NVRAM_OPTIONS:
+			if (!optarg)
+				break;	/* Fix for Coverity false positive */
+			if (verify_nvram_options(optarg,
+					&opt.nvram_mode, &opt.nvram_size)) {
+				exit(error_exit);
+			}
+			xfree(opt.nvram_options);
+			opt.nvram_options = xstrdup(optarg);
+			break;
+		case LONG_OPT_MAP_JSON:
+			if (!optarg)
+				break;	/* Fix for Coverity false positive */
+			if (verify_map_json(optarg,
+				&opt.sockets_per_node,
+				&opt.cores_per_socket,
+				&opt.threads_per_core,
+				&opt.ntasks_per_core,
+				&_hint_type,
+				NULL)) {
+				exit(error_exit);
+			}
+			opt.hint_set = true;
+			opt.ntasks_per_core_set = true;
+			opt.threads_per_core_set = true;
+			xfree(opt.map_json);
+			opt.map_json = xstrdup(optarg);
+			break;
+		case LONG_OPT_OPTIMISE_FOR_ENERGY:
+			if (!optarg)
+				break;	/* Fix for Coverity false positive */
+			opt.optimise_for_energy = true;
 			break;
 		default:
 			if (spank_process_option (opt_char, optarg) < 0)
@@ -2819,6 +2950,12 @@ static bool _opt_verify(void)
 		verified = false;
 	}
 
+	if (opt.hint_env && opt.map_json) {
+		error ("ERROR: --hint and --map-json are mutually exclusive.");
+		verified = false;
+		exit(error_exit);
+	}
+
 	if (opt.hint_env &&
 	    (!opt.hint_set && !opt.ntasks_per_core_set &&
 	     !opt.threads_per_core_set)) {
@@ -2832,9 +2969,23 @@ static bool _opt_verify(void)
 		}
 	}
 
+	// NEXTGenIO
+	if ( (opt.cpu_freq_gov != NO_VAL) || (opt.cpu_freq_max != NO_VAL) ) {
+		debug3("%s: HINT: CPU Frequency has been defined by the user. Not overriding. ", __func__);
+	} else if (_hint_type) {
+		if ( xstrcasecmp(_hint_type, "compute_bound") == 0 ) {
+			debug3("%s: HINT: Setting governor to PERFORMANCE; due to compute bound setting.", __func__);
+			opt.cpu_freq_gov = CPU_FREQ_PERFORMANCE;
+		} else if ( xstrcasecmp(_hint_type, "memory_bound") == 0 ) {
+			debug3("%s: HINT: Setting governor to POWERSAVE; due to memory bound setting.", __func__);
+			opt.cpu_freq_gov = CPU_FREQ_POWERSAVE;
+		}
+	}
+
 	_fullpath(&sbopt.efname, opt.cwd);
 	_fullpath(&sbopt.ifname, opt.cwd);
 	_fullpath(&sbopt.ofname, opt.cwd);
+	_fullpath(&opt.map_json, opt.cwd);	// NEXTGenIO
 
 	if (!opt.nodelist) {
 		if ((opt.nodelist = xstrdup(getenv("SLURM_HOSTFILE")))) {
@@ -3126,13 +3277,171 @@ static bool _opt_verify(void)
 		}
 	}
 
-	cpu_freq_set_env("SLURM_CPU_FREQ_REQ",
-			 opt.cpu_freq_min, opt.cpu_freq_max, opt.cpu_freq_gov);
-
 	if (opt.x11) {
 		opt.x11_target_port = x11_get_display_port();
 		opt.x11_magic_cookie = x11_get_xauth();
 	}
+
+	/* NEXTGenIO */
+	if (opt.workflow_start == true) {
+		if (opt.workflow_prior_dependency || opt.workflow_end != false) {
+			error("Incompatible workflow options (START and Prior Job ID or END)");
+			exit(error_exit);
+		}
+	// ToDo: NEXTGenIO add more logic
+	}
+
+	if (opt.workflow_end == true) {
+		if (opt.workflow_start != false || !opt.workflow_prior_dependency) {
+			error("Incompatible workflow options (END and START or no Prior Job ID)");
+			exit(error_exit);
+		}
+	// ToDo: NEXTGenIO add more logic
+	}
+
+	if (opt.workflow_prior_dependency) {
+		if (opt.workflow_start != false) {
+			error("Incompatible workflow options (Prior Job ID and START)");
+			exit(error_exit);
+		}
+		if ( opt.jobid != NO_VAL ) {
+			char *job_str_tmp = NULL, *tok, *save_ptr = NULL, *end_ptr = NULL;
+			long int long_id;
+			uint32_t job_id = 0;
+
+			job_str_tmp = xstrdup(opt.workflow_prior_dependency);
+			tok = strtok_r(job_str_tmp, ",", &save_ptr);
+			while (tok) {
+				long_id = strtol(tok, &end_ptr, 10);
+				if ((long_id <= 0) || (long_id == LONG_MAX) ||
+				    ((end_ptr[0] != '\0') && (end_ptr[0] != '_'))) {
+					info("%s: invalid job id %s", __func__, tok);
+					continue;
+				}
+
+				job_id = (uint32_t) long_id;
+				if (job_id == opt.jobid ) {
+					error("Incompatible workflow options (Circular workflows (job id:%u, prior_dependency id:%u [%s]))",
+							opt.jobid, job_id, opt.workflow_prior_dependency);
+					exit(error_exit);
+				}
+			}
+			xfree(job_str_tmp);
+		}
+
+	// ToDo: NEXTGenIO add more logic
+	}
+
+	if (opt.filesystem_device) {
+		if (!opt.filesystem_type || !opt.filesystem_mountpoint || !opt.filesystem_size) {
+			if ( xstrcmp(opt.filesystem_type, "gekkofs") != 0 ) {
+				error("Filesystem device requires type, mountpoint and size");
+				exit(error_exit);
+			}
+		}
+		if (opt.nvram_mode != 1) {
+			error("Filesystems require 1LM or AppDirect space.");
+			exit(error_exit);
+		}
+
+	// ToDo: NEXTGenIO add more logic
+	}
+
+	if (opt.filesystem_type) {
+		if (!opt.filesystem_device || !opt.filesystem_mountpoint || !opt.filesystem_size) {
+			if ( xstrcmp(opt.filesystem_type, "gekkofs") != 0 ) {
+				error("Filesystem type requires device, mountpoint and size");
+				exit(error_exit);
+			}
+		}
+		if (opt.nvram_mode != 1) {
+			error("Filesystems require 1LM or AppDirect space.");
+			exit(error_exit);
+		}
+
+	// ToDo: NEXTGenIO add more logic
+	}
+
+	if (opt.filesystem_mountpoint) {
+		if (!opt.filesystem_type || !opt.filesystem_device || !opt.filesystem_size) {
+			if ( xstrcmp(opt.filesystem_type, "gekkofs") != 0 ) {
+				error("Filesystem mountpoint requires device, type and size");
+				exit(error_exit);
+			}
+		}
+		if (opt.nvram_mode != 1) {
+			error("Filesystems require 1LM or AppDirect space.");
+			exit(error_exit);
+		}
+
+	// ToDo: NEXTGenIO add more logic
+	}
+
+	if (opt.filesystem_size) {
+		if (!opt.filesystem_type || !opt.filesystem_device || !opt.filesystem_mountpoint) {
+			error("Filesystem size requires device, type and mountpoint");
+			exit(error_exit);
+		}
+		if ( xstrcmp(opt.filesystem_type, "gekkofs") == 0 ) {
+			if ( !( (xstrcmp(opt.filesystem_size, "0") == 0) ||
+					(xstrcmp(opt.filesystem_size, "1") == 0) ) ) {
+				error("Filesystem GekkoFS does not accept a size argument");
+				exit(error_exit);
+			}
+		}
+		if (opt.nvram_mode != 1) {
+			error("Filesystems require 1LM or AppDirect space.");
+			exit(error_exit);
+		}
+	// ToDo: NEXTGenIO add more logic
+	}
+
+	if (opt.service_type) {
+
+	// ToDo: NEXTGenIO add more logic
+	}
+
+	if (opt.nvram_options) {
+		if (opt.constraints) {
+			error("NVRAM options cannot be used with constraints.");
+			exit(error_exit);
+		}
+
+	// ToDo: NEXTGenIO add more logic
+	}
+
+	if (opt.map_json) {
+		if ( (opt.cpu_freq_gov != NO_VAL) || (opt.cpu_freq_max != NO_VAL) ) {
+			debug3("%s: CPU Frequency has been defined by the user. Not overriding. ", __func__);
+		} else if (_hint_type) {
+			if ( xstrcasecmp(_hint_type, "compute_bound") == 0 ) {
+				debug3("%s: Setting governor to PERFORMANCE; due to compute bound setting.", __func__);
+				opt.cpu_freq_gov = CPU_FREQ_PERFORMANCE;
+			} else if ( xstrcasecmp(_hint_type, "memory_bound") == 0 ) {
+				debug3("%s: Setting governor to POWERSAVE; due to memory bound setting.", __func__);
+				opt.cpu_freq_gov = CPU_FREQ_POWERSAVE;
+			}
+		}
+
+		// ToDo: NEXTGenIO add more logic
+	}
+
+	if (opt.optimise_for_energy) {
+		if ( (opt.cpu_freq_gov != NO_VAL) || (opt.cpu_freq_max != NO_VAL) || (opt.cpu_freq_min != NO_VAL) ) {
+			error("optimise-for-energy cannot be used with CPU frequency options.");
+			exit(error_exit);
+		}
+		if (opt.map_json) {
+			error("optimise-for-energy cannot be used with the JSON MAP file option.");
+			exit(error_exit);
+		}
+		debug3("%s: Setting CPU governor to POWERSAVE.", __func__);
+		opt.cpu_freq_gov = CPU_FREQ_POWERSAVE;
+
+	}
+
+	cpu_freq_set_env("SLURM_CPU_FREQ_REQ",
+			 opt.cpu_freq_min, opt.cpu_freq_max, opt.cpu_freq_gov);
 
 	return verified;
 }
@@ -3292,6 +3601,10 @@ static char *print_constraints(void)
 	if (opt.c_constraints != NULL)
 		xstrfmtcat(buf, "cluster-constraints=`%s' ", opt.c_constraints);
 
+	// NEXTGenIO
+	if (opt.nvram_options != NULL)
+		xstrfmtcat(buf, "NVRAM mode=%u, NVRAM size=%u constraints ", opt.nvram_mode, opt.nvram_size);
+
 	return buf;
 }
 
@@ -3375,6 +3688,7 @@ static void _opt_list(void)
 	xfree(str);
 	info("reboot            : %s", opt.reboot ? "no" : "yes");
 	info("network           : %s", opt.network);
+	info("energy optimise: %s", opt.optimise_for_energy ? "no" : "yes");		// NEXTGenIO
 
 	if (opt.begin) {
 		char time_str[32];
@@ -3388,11 +3702,14 @@ static void _opt_list(void)
 	}
 	info("array             : %s",
 	     sbopt.array_inx == NULL ? "N/A" : sbopt.array_inx);
+	info("hint_set          : `%d'", opt.hint_set);															// NEXTGenIO
+	info("hint              : `%s'", opt.hint_env);															// NEXTGenIO
 	info("cpu_freq_min      : %u", opt.cpu_freq_min);
 	info("cpu_freq_max      : %u", opt.cpu_freq_max);
 	info("cpu_freq_gov      : %u", opt.cpu_freq_gov);
 	if (opt.delay_boot != NO_VAL)
 		info("delay_boot        : %u", opt.delay_boot);
+	info("MAP json          : %s", opt.map_json);															// NEXTGEnIO
 	info("mail_type         : %s", print_mail_type(opt.mail_type));
 	info("mail_user         : %s", opt.mail_user);
 	info("sockets-per-node  : %d", opt.sockets_per_node);
@@ -3401,6 +3718,7 @@ static void _opt_list(void)
 	info("ntasks-per-node   : %d", opt.ntasks_per_node);
 	info("ntasks-per-socket : %d", opt.ntasks_per_socket);
 	info("ntasks-per-core   : %d", opt.ntasks_per_core);
+	info("NVRAM options     : %s (Type:%u, Size:%u)", opt.nvram_options, opt.nvram_mode, opt.nvram_size);	// NEXTGEnIO
 	info("mem-bind          : %s",
 	     opt.mem_bind == NULL ? "default" : opt.mem_bind);
 	info("plane_size        : %u", opt.plane_size);
@@ -3424,6 +3742,9 @@ static void _opt_list(void)
 	info("wait              : %s", sbopt.wait ? "no" : "yes");
 	if (opt.mcs_label)
 		info("mcs-label         : %s",opt.mcs_label);
+	info("workflow_start    : %s", opt.workflow_start ? "yes" : "no");			// NEXTGenIO
+	info("workflow_prior_dependency   : %s", opt.workflow_prior_dependency);	// NEXTGenIO
+	info("workflow_end      : %s", opt.workflow_end   ? "yes" : "no");			// NEXTGenIO
 	info("cpus-per-gpu      : %d", opt.cpus_per_gpu);
 	info("gpus              : %s", opt.gpus);
 	info("gpu-bind          : %s", opt.gpu_bind);
@@ -3432,6 +3753,11 @@ static void _opt_list(void)
 	info("gpus-per-socket   : %s", opt.gpus_per_socket);
 	info("gpus-per-task     : %s", opt.gpus_per_task);
 	info("mem-per-gpu       : %"PRIi64, opt.mem_per_gpu);
+	info("filesystem device : %s", opt.filesystem_device);		// NEXTGenIO
+	info("filesystem type   : %s", opt.filesystem_type);		// NEXTGenIO
+	info("filesystem mount  : %s", opt.filesystem_mountpoint);	// NEXTGenIO
+	info("filesystem size   : %s", opt.filesystem_size);		// NEXTGenIO
+	info("service type      : %s", opt.service_type);			// NEXTGenIO
 }
 
 static void _usage(void)
@@ -3457,6 +3783,10 @@ static void _usage(void)
 "              [--bb=burst_buffer_spec] [--bbf=burst_buffer_file]\n"
 "              [--array=index_values] [--profile=...] [--ignore-pbs] [--spread-job]\n"
 "              [--export[=names]] [--export-file=file|fd] [--delay-boot=mins]\n"
+"              [--workflow_start] [--workflow_prior_dependency=job_id] [--workflow_end]\n"
+"              [--filesystem-device] [--filesystem-type] [--filesystem-mountpoint] [--filesystem-size]\n"	// NEXTGEnIO
+"              [--service-type] [--nvram-options=mode:size] [--map-json=filename]\n"						// NEXTGenIO
+"              [--optimise-for-energy]\n"
 "              [--use-min-nodes]\n"
 #ifdef HAVE_GPUS
 "              [--cpus-per-gpu=n] [--gpus=n] [--gpu-bind=...] [--gpu-freq=...]\n"
@@ -3492,6 +3822,10 @@ static void _help(void)
 "      --export[=names]        specify environment variables to export\n"
 "      --export-file=file|fd   specify environment variables file or file\n"
 "                              descriptor to export\n"
+"      --filesystem-device=    set the device of the filesystem of a job\n"		// NEXTGenIO
+"      --filesystem-type=      set the filesystem type of a job\n"
+"      --filesystem-mountpoint= set the filesystem mountpoint of a job\n"
+"      --filesystem-size=      set the filesystem size of a job in GBs\n"
 "      --get-user-env          load environment from local cluster\n"
 "      --gid=group_id          group ID to run job as (user root only)\n"
 "      --gres=list             required generic resources\n"
@@ -3509,6 +3843,7 @@ static void _help(void)
 "                              NOTE: SlurmDBD must up.\n"
 "  -m, --distribution=type     distribution method for processes to nodes\n"
 "                              (type = block|cyclic|arbitrary)\n"
+"      --map-json=filename     provide the JSON MAP file\n"						// NEXTGenIO
 "      --mail-type=type        notify on state change: BEGIN, END, FAIL or ALL\n"
 "      --mail-user=user        who to send email notification for job state\n"
 "                              changes\n"
@@ -3520,6 +3855,7 @@ static void _help(void)
 "  -N, --nodes=N               number of nodes on which to run (N = min[-max])\n"
 "  -o, --output=out            file for batch script's standard output\n"
 "  -O, --overcommit            overcommit resources\n"
+"      --optimise-for-energy   optimise nodes for low energy usage\n"		// NEXTGenIO
 "  -p, --partition=partition   partition requested\n"
 "      --parsable              outputs only the jobid and cluster name (if present),\n"
 "                              separated by semicolon, only on successful submission.\n"
@@ -3535,6 +3871,7 @@ static void _help(void)
 "      --requeue               if set, permit the job to be requeued\n"
 "  -s, --oversubscribe         over subscribe resources with other jobs\n"
 "  -S, --core-spec=cores       count of reserved cores\n"
+"      --service-type          set the service type of a job\n"		// NEXTGenIO
 "      --signal=[B:]num[@time] send signal when time limit within time seconds\n"
 "      --spread-job            spread job across as many nodes as possible\n"
 "      --switches=max-switches{@max-time-to-wait}\n"
@@ -3548,6 +3885,9 @@ static void _help(void)
 "  -v, --verbose               verbose mode (multiple -v's increase verbosity)\n"
 "  -W, --wait                  wait for completion of submitted job\n"
 "      --wckey=wckey           wckey to run job under\n"
+"      --workflow-start        indicate that this the first job in a workflow\n"		// NEXTGenIO
+"      --workflow-prior-dependency=jobid indicate that this is a subsequent job in a workflow\n"
+"      --workflow-end          indicate that this is the last job in a workflow\n"
 "      --wrap[=command string] wrap command string in a sh script and submit\n"
 
 "\n"
@@ -3559,6 +3899,7 @@ static void _help(void)
 "      --mem=MB                minimum amount of real memory\n"
 "      --mincpus=n             minimum number of logical processors (threads)\n"
 "                              per node\n"
+"      --nvram-options=mode:size type and size of NVRAM constraints\n"		// NEXTGenIO
 "      --reservation=name      allocate resources from named reservation\n"
 "      --tmp=MB                minimum amount of temporary disk\n"
 "  -w, --nodelist=hosts...     request a specific list of hosts\n"

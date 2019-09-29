@@ -1988,6 +1988,11 @@ static int _restore_node_state(int recover,
 		node_ptr->mem_spec_limit = old_node_ptr->mem_spec_limit;
 		node_ptr->slurmd_start_time = old_node_ptr->slurmd_start_time;
 		node_ptr->tmp_disk      = old_node_ptr->tmp_disk;
+		node_ptr->has_nvram		            = old_node_ptr->has_nvram;					// NEXTGenIO
+		node_ptr->nvram_capacity	        = old_node_ptr->nvram_capacity;				// NEXTGenIO
+		node_ptr->nvram_memory_capacity	    = old_node_ptr->nvram_memory_capacity;		// NEXTGenIO
+		node_ptr->nvram_appdirect_capacity	= old_node_ptr->nvram_appdirect_capacity;	// NEXTGenIO
+		node_ptr->nvram_number_of_namespaces= old_node_ptr->nvram_number_of_namespaces;	// NEXTGenIO
 		node_ptr->weight        = old_node_ptr->weight;
 
 		node_ptr->sus_job_cnt   = old_node_ptr->sus_job_cnt;

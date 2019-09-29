@@ -301,6 +301,14 @@ extern stepd_step_rec_t *stepd_step_rec_create(launch_tasks_request_msg_t *msg,
 	job->restart_dir = xstrdup(msg->restart_dir);
 	job->cpus_per_task = msg->cpus_per_task;
 
+	// NEXTGenIO
+	job->filesystem_device     = xstrdup(msg->filesystem_device);
+	job->filesystem_type       = xstrdup(msg->filesystem_type);
+	job->filesystem_mountpoint = xstrdup(msg->filesystem_mountpoint);
+	job->filesystem_size       = xstrdup(msg->filesystem_size);
+	job->service_type          = xstrdup(msg->service_type);
+	job->optimise_for_energy   = msg->optimise_for_energy;
+
 	job->env     = _array_copy(msg->envc, msg->env);
 	job->array_job_id  = msg->job_id;
 	job->array_task_id = NO_VAL;
@@ -355,6 +363,7 @@ extern stepd_step_rec_t *stepd_step_rec_create(launch_tasks_request_msg_t *msg,
 	job->envtp->mem_bind_type = 0;
 	job->envtp->mem_bind = NULL;
 	job->envtp->ckpt_dir = NULL;
+	job->envtp->filesystem_mountpoint = NULL;	// NEXTGenIO
 	if (!msg->resp_port)
 		msg->num_resp_port = 0;
 	if (msg->num_resp_port) {
@@ -518,6 +527,14 @@ batch_stepd_step_rec_create(batch_job_launch_msg_t *msg)
 	job->ckpt_dir = xstrdup(msg->ckpt_dir);
 	job->restart_dir = xstrdup(msg->restart_dir);
 
+	// NEXTGenIO
+	job->filesystem_device     = xstrdup(msg->filesystem_device);
+	job->filesystem_type       = xstrdup(msg->filesystem_type);
+	job->filesystem_mountpoint = xstrdup(msg->filesystem_mountpoint);
+	job->filesystem_size       = xstrdup(msg->filesystem_size);
+	job->service_type          = xstrdup(msg->service_type);
+	job->optimise_for_energy   = msg->optimise_for_energy;
+
 	job->env     = _array_copy(msg->envc, msg->environment);
 	job->eio     = eio_handle_create(0);
 	job->sruns   = list_create((ListDelF) _srun_info_destructor);
@@ -535,6 +552,7 @@ batch_stepd_step_rec_create(batch_job_launch_msg_t *msg)
 	job->envtp->mem_bind = NULL;
 	job->envtp->ckpt_dir = NULL;
 	job->envtp->restart_cnt = msg->restart_cnt;
+	job->envtp->filesystem_mountpoint = NULL;	// NEXTGenIO
 
 	if (msg->cpus_per_node)
 		job->cpus    = msg->cpus_per_node[0];
@@ -631,6 +649,12 @@ stepd_step_rec_destroy(stepd_step_rec_t *job)
 	xfree(job->tres_freq);
 	xfree(job->user_name);
 	xfree(job->x11_xauthority);
+	// NEXTGenIO
+	xfree(job->filesystem_device);
+	xfree(job->filesystem_type);
+	xfree(job->filesystem_mountpoint);
+	xfree(job->filesystem_size);
+	xfree(job->service_type);
 	xfree(job);
 }
 

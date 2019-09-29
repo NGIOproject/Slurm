@@ -2436,6 +2436,101 @@ extern void print_fields(type_t type, void *object)
 					     tmp_char,
 					     (curr_inx == field_count));
 			break;
+		case PRINT_WORKFLOWSID:
+			switch(type) {
+			case JOB:
+				tmp_char = xstrdup_printf("%u", job->workflow_id);
+				break;
+			case JOBSTEP:
+				tmp_char = xstrdup_printf("%u", job->workflow_id);
+				break;
+			case JOBCOMP:
+
+				break;
+			default:
+
+				break;
+			}
+			field->print_routine(field,
+					     tmp_char,
+					     (curr_inx == field_count));
+			break;
+		case PRINT_WORKFLOWSPRIOR:
+			switch(type) {
+			case JOB:
+				tmp_char = job->workflow_prior;
+				break;
+			case JOBSTEP:
+				tmp_char = job->workflow_prior;
+				break;
+			case JOBCOMP:
+
+				break;
+			default:
+
+				break;
+			}
+			field->print_routine(field,
+						 tmp_char,
+						 (curr_inx == field_count));
+			break;
+		case PRINT_WORKFLOWSPOST:
+			switch(type) {
+			case JOB:
+				tmp_char = job->workflow_post;
+				break;
+			case JOBSTEP:
+				tmp_char = job->workflow_post;
+				break;
+			case JOBCOMP:
+
+				break;
+			default:
+
+				break;
+			}
+			field->print_routine(field,
+						 tmp_char,
+						 (curr_inx == field_count));
+			break;
+		case PRINT_WORKFLOWSSTART:
+			switch(type) {
+			case JOB:
+				tmp_int = job->workflow_start;
+				break;
+			case JOBSTEP:
+				tmp_int = job->workflow_start;
+				break;
+			case JOBCOMP:
+
+				break;
+			default:
+
+				break;
+			}
+			field->print_routine(field,
+					     (uint16_t)tmp_int,
+						 (curr_inx == field_count));
+			break;
+		case PRINT_WORKFLOWSEND:
+			switch(type) {
+			case JOB:
+				tmp_int = job->workflow_end;
+				break;
+			case JOBSTEP:
+				tmp_int = job->workflow_end;
+				break;
+			case JOBCOMP:
+
+				break;
+			default:
+
+				break;
+			}
+			field->print_routine(field,
+						 (uint16_t)tmp_int,
+						 (curr_inx == field_count));
+			break;
 		default:
 			break;
 		}

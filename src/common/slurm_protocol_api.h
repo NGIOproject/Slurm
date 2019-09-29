@@ -261,7 +261,7 @@ char *slurm_get_job_slurmctld_logfile(void);
 
 /* slurm_get_node_features_plugins
  * get node_features_plugins from slurmctld_conf object
- * RET char *   - knl_plugins, MUST be xfreed by caller
+ * RET char *   - node_features_plugins, MUST be xfreed by caller
  */
 char *slurm_get_node_features_plugins(void);
 
@@ -777,6 +777,12 @@ char *slurm_get_acct_gather_interconnect_type(void);
  */
 char *slurm_get_acct_gather_filesystem_type(void);
 
+// NEXTGenIO
+/* slurm_get_acct_nvram_profile_type
+ * get NVRAMAccountingType from slurmctld_conf object
+ * RET char *   - acct_gather_nvram_type, MUST be xfreed by caller
+ */
+char *slurm_get_acct_gather_nvram_type(void);
 
 /* slurm_get_acct_gather_node_freq
  * returns the accounting poll frequency for requesting info from a
@@ -944,6 +950,67 @@ int16_t slurm_get_srun_eio_timeout(void);
  * Return the timeout used for prolog/epilog
  */
 extern uint16_t slurm_get_prolog_timeout(void);
+
+// NEXTGenIO
+/* slurm_get_filesystem_devices
+ * returns the value of filesystem_devices in slurmctld_conf object
+ * RET char *    - filesystem_devoces, MUST be xfreed by caller
+ */
+extern char *slurm_get_filesystem_devices(void);
+
+/* slurm_set_filesystem_devices
+ * IN: char *filesystem_devices
+ * RET 0 or error code
+ */
+int slurm_set_filesystem_devices(char *filesystem_devices);
+
+/* slurm_get_filesystem_types
+ * returns the value of filesystem_types in slurmctld_conf object
+ * RET char *    - filesystem_types, MUST be xfreed by caller
+ */
+extern char *slurm_get_filesystem_types(void);
+
+/* slurm_set_filesystem_types
+ * IN: char *filesystem_types
+ * RET 0 or error code
+ */
+int slurm_set_filesystem_types(char *filesystem_types);
+
+/* slurm_get_filesystem_mountpoints
+ * returns the value of filesystem_mountpoints in slurmctld_conf object
+ * RET char *    - filesystem_mountpoints, MUST be xfreed by caller
+ */
+extern char *slurm_get_filesystem_mountpoints(void);
+
+/* slurm_set_filesystem_mountpoints
+ * IN: char *filesystem_mountpoints
+ * RET 0 or error code
+ */
+int slurm_set_filesystem_mountpoints(char *filesystem_mountpoints);
+
+/* slurm_get_filesystem_sizes
+ * returns the value of filesystem_sizes in slurmctld_conf object
+ * RET char *    - filesystem_sizes, MUST be xfreed by caller
+ */
+extern char *slurm_get_filesystem_sizes(void);
+
+/* slurm_set_filesystem_sizes
+ * IN: char *filesystem_sizes
+ * RET 0 or error code
+ */
+int slurm_set_filesystem_sizes(char *filesystem_sizes);
+
+/* slurm_get_service_types
+ * returns the value of service_types in slurmctld_conf object
+ * RET char *    - service_types, MUST be xfreed by caller
+ */
+extern char *slurm_get_service_types(void);
+
+/* slurm_set_service_types
+ * IN: char *service_types
+ * RET 0 or error code
+ */
+int slurm_set_service_types(char *service_types);
 
 /**********************************************************************\
  * general message management functions used by slurmctld, slurmd

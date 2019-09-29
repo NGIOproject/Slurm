@@ -444,6 +444,23 @@ char *slurm_sprint_node_table(node_info_t *node_ptr, int one_liner)
 
 	xstrcat(out, line_end);
 
+	/****** NVRAM Line ******/
+	// NEXTGenIO
+	if (node_ptr->nvram_capacity == NO_VAL)
+		xstrcat(out, "Total NVRAM=N/A Free NVRAM=N/A");
+	else
+		xstrfmtcat(out, "Total NVRAM=%u Memory Capacity=%u, AppDirect Capacity=%u",
+				node_ptr->nvram_capacity, node_ptr->nvram_memory_capacity, node_ptr->nvram_appdirect_capacity);
+
+	xstrcat(out, line_end);
+
+	if (node_ptr->nvram_capacity == NO_VAL)
+		xstrcat(out, "Number of NVRAM partitions=N/A");
+	else
+		xstrfmtcat(out, "Number of NVRAM partitions=%u", node_ptr->nvram_number_of_namespaces);
+
+	xstrcat(out, line_end);
+
 	/****** Line ******/
 	if (node_ptr->reason && node_ptr->reason[0])
 		xstrcat(reason_str, node_ptr->reason);

@@ -900,6 +900,8 @@ extern void slurmdb_destroy_job_rec(void *object)
 		xfree(job->user);
 		xfree(job->wckey);
 		xfree(job->work_dir);
+		xfree(job->workflow_prior);
+		xfree(job->workflow_post);
 		xfree(job);
 	}
 }

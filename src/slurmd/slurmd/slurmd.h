@@ -151,6 +151,7 @@ typedef struct slurmd_config {
 	char           *job_acct_gather_params; /* job accounting gather params */
 	char           *acct_gather_energy_type; /*  */
 	char           *acct_gather_filesystem_type; /*  */
+	char           *acct_gather_nvram_type; /*  */			// NEXTGenIO
 	char           *acct_gather_interconnect_type; /*  */
 	char           *acct_gather_profile_type; /*  */
 	char           *msg_aggr_params;      /* message aggregation params */
@@ -170,6 +171,12 @@ typedef struct slurmd_config {
 	uint16_t      kill_wait;	/* seconds between SIGXCPU to SIGKILL
 					 * on job termination */
 	char           *x11_params;	/* X11Parameters */
+	uint16_t has_nvram;     		/* 1 if NVDIMM is supported on the node */		// NEXTGenIO
+	uint16_t nvram_partition_no;    /* Number of NVDIMM partitions on the node */	// NEXTGenIO
+	uint32_t nvram_capacity; 			/* Total NVRAM in GBs */ 					// NEXTGenIO
+	uint32_t nvram_memory_capacity; 	/* Memory NVRAM in GBs */ 					// NEXTGenIO
+	uint32_t nvram_appdirect_capacity; 	/* AppDirect NVRAM in GBs */ 				// NEXTGenIO
+	uint16_t nvram_number_of_namespaces;/* Namespaces */							// NEXTGenIO
 } slurmd_conf_t;
 
 extern slurmd_conf_t * conf;

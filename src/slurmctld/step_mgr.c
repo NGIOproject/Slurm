@@ -415,6 +415,11 @@ static void _free_step_rec(struct step_record *step_ptr)
 	xfree(step_ptr->ext_sensors);
 	xfree(step_ptr->cpus_per_tres);
 	xfree(step_ptr->mem_per_tres);
+	xfree(step_ptr->filesystem_device);		// NEXTGenIO
+	xfree(step_ptr->filesystem_type);		// NEXTGenIO
+	xfree(step_ptr->filesystem_mountpoint);	// NEXTGenIO
+	xfree(step_ptr->filesystem_size);		// NEXTGenIO
+	xfree(step_ptr->service_type);			// NEXTGenIO
 	xfree(step_ptr->tres_bind);
 	xfree(step_ptr->tres_freq);
 	xfree(step_ptr->tres_per_step);
@@ -525,6 +530,14 @@ dump_step_desc(job_step_create_request_msg_t *step_spec)
 		debug3("   TRES_per_socket=%s", step_spec->tres_per_socket);
 	if (step_spec->tres_per_task)
 		debug3("   TRES_per_task=%s", step_spec->tres_per_task);
+	// NEXTGenIO
+	if (step_spec->filesystem_type)
+		debug3("   Filesystem type=%s, device=%s, mountpoint=%s, size=%s",
+			step_spec->filesystem_type, step_spec->filesystem_device,
+			step_spec->filesystem_mountpoint, step_spec->filesystem_size);
+	if (step_spec->service_type)
+		debug3("   Service type=%s", step_spec->service_type);
+	debug3("   Optimise for energy=%u", step_spec->optimise_for_energy);
 }
 
 
@@ -2455,7 +2468,12 @@ step_create(job_step_create_request_msg_t *step_specs,
 	if (_test_strlen(step_specs->ckpt_dir, "ckpt_dir", MAXPATHLEN)	||
 	    _test_strlen(step_specs->host, "host", 1024)		||
 	    _test_strlen(step_specs->name, "name", 1024)		||
-	    _test_strlen(step_specs->network, "network", 1024))
+	    _test_strlen(step_specs->network, "network", 1024)  ||
+		_test_strlen(step_specs->filesystem_device, "Filesystem device", 256) ||
+		_test_strlen(step_specs->filesystem_type, "Filesystem type", 128) ||
+		_test_strlen(step_specs->filesystem_mountpoint, "Filesystem mountpoint", 512) ||
+		_test_strlen(step_specs->filesystem_size, "Filesystem size", 32) ||
+		_test_strlen(step_specs->service_type, "Service type", 128))
 		return ESLURM_PATHNAME_TOO_LONG;
 
 	if (job_ptr->next_step_id >= slurmctld_conf.max_step_cnt)
@@ -2646,6 +2664,14 @@ step_create(job_step_create_request_msg_t *step_specs,
 	step_ptr->tres_per_node = xstrdup(step_specs->tres_per_node);
 	step_ptr->tres_per_socket = xstrdup(step_specs->tres_per_socket);
 	step_ptr->tres_per_task = xstrdup(step_specs->tres_per_task);
+
+	// NEXTGenIO
+	step_ptr->filesystem_device     = xstrdup(step_specs->filesystem_device);
+	step_ptr->filesystem_type       = xstrdup(step_specs->filesystem_type);
+	step_ptr->filesystem_mountpoint = xstrdup(step_specs->filesystem_mountpoint);
+	step_ptr->filesystem_size       = xstrdup(step_specs->filesystem_size);
+	step_ptr->service_type          = xstrdup(step_specs->service_type);
+	step_ptr->optimise_for_energy   = step_specs->optimise_for_energy;
 
 	/* step's name and network default to job's values if not
 	 * specified in the step specification */
@@ -3097,6 +3123,13 @@ static void _pack_ctld_job_step_info(struct step_record *step_ptr, Buf buffer,
 		packstr(step_ptr->tres_per_node, buffer);
 		packstr(step_ptr->tres_per_socket, buffer);
 		packstr(step_ptr->tres_per_task, buffer);
+		// NEXTGenIO
+		packstr(step_ptr->filesystem_device, buffer);
+		packstr(step_ptr->filesystem_type, buffer);
+		packstr(step_ptr->filesystem_mountpoint, buffer);
+		packstr(step_ptr->filesystem_size, buffer);
+		packstr(step_ptr->service_type, buffer);
+		pack8(step_ptr->optimise_for_energy, buffer);
 	} else if (protocol_version >= SLURM_17_11_PROTOCOL_VERSION) {
 		pack32(step_ptr->job_ptr->array_job_id, buffer);
 		pack32(step_ptr->job_ptr->array_task_id, buffer);
@@ -4008,6 +4041,13 @@ extern int dump_job_step_state(void *x, void *arg)
 	packstr(step_ptr->tres_per_node, buffer);
 	packstr(step_ptr->tres_per_socket, buffer);
 	packstr(step_ptr->tres_per_task, buffer);
+	// NEXTGenIO
+	packstr(step_ptr->filesystem_device, buffer);
+	packstr(step_ptr->filesystem_type, buffer);
+	packstr(step_ptr->filesystem_mountpoint, buffer);
+	packstr(step_ptr->filesystem_size, buffer);
+	packstr(step_ptr->service_type, buffer);
+	pack8(step_ptr->optimise_for_energy, buffer);
 	return 0;
 }
 
@@ -4023,7 +4063,7 @@ extern int load_step_state(struct job_record *job_ptr, Buf buffer,
 {
 	struct step_record *step_ptr = NULL;
 	bitstr_t *exit_node_bitmap = NULL, *core_bitmap_job = NULL;
-	uint8_t no_kill;
+	uint8_t no_kill, optmise_for_energy;
 	uint16_t cyclic_alloc, port, batch_step;
 	uint16_t start_protocol_ver = SLURM_MIN_PROTOCOL_VERSION;
 	uint16_t ckpt_interval, cpus_per_task, resv_port_cnt, state;
@@ -4037,6 +4077,9 @@ extern int load_step_state(struct job_record *job_ptr, Buf buffer,
 	char *cpus_per_tres = NULL, *mem_per_tres = NULL, *tres_bind = NULL;
 	char *tres_freq = NULL, *tres_per_step = NULL, *tres_per_node = NULL;
 	char *tres_per_socket = NULL, *tres_per_task = NULL;
+	char *filesystem_device = NULL, *filesystem_type = NULL;
+	char *filesystem_mountpoint = NULL, *filesystem_size = NULL;
+	char *service_type = NULL;
 	dynamic_plugin_data_t *switch_tmp = NULL;
 	check_jobinfo_t check_tmp = NULL;
 	slurm_step_layout_t *step_layout = NULL;
@@ -4114,6 +4157,13 @@ extern int load_step_state(struct job_record *job_ptr, Buf buffer,
 		safe_unpackstr_xmalloc(&tres_per_node, &name_len, buffer);
 		safe_unpackstr_xmalloc(&tres_per_socket, &name_len, buffer);
 		safe_unpackstr_xmalloc(&tres_per_task, &name_len, buffer);
+		// NEXTGenIO
+		safe_unpackstr_xmalloc(&filesystem_device, &name_len, buffer);
+		safe_unpackstr_xmalloc(&filesystem_type, &name_len, buffer);
+		safe_unpackstr_xmalloc(&filesystem_mountpoint, &name_len, buffer);
+		safe_unpackstr_xmalloc(&filesystem_size, &name_len, buffer);
+		safe_unpackstr_xmalloc(&service_type, &name_len, buffer);
+		safe_unpack8(&optmise_for_energy, buffer);
 	} else if (protocol_version >= SLURM_MIN_PROTOCOL_VERSION) {
 		safe_unpack32(&step_id, buffer);
 		safe_unpack16(&cyclic_alloc, buffer);
@@ -4273,6 +4323,24 @@ extern int load_step_state(struct job_record *job_ptr, Buf buffer,
 	step_ptr->tres_fmt_alloc_str = tres_fmt_alloc_str;
 	tres_fmt_alloc_str = NULL;
 
+	//NEXTGenIO
+	xfree(step_ptr->filesystem_device);
+	step_ptr->filesystem_device		= filesystem_device;
+	filesystem_device = NULL;
+	xfree(step_ptr->filesystem_type);
+	step_ptr->filesystem_type		= filesystem_type;
+	filesystem_type = NULL;
+	xfree(step_ptr->filesystem_mountpoint);
+	step_ptr->filesystem_mountpoint	= filesystem_mountpoint;
+	filesystem_mountpoint = NULL;
+	xfree(step_ptr->filesystem_size);
+	step_ptr->filesystem_size		= filesystem_size;
+	filesystem_size = NULL;
+	xfree(step_ptr->service_type);
+	step_ptr->service_type			= service_type;
+	service_type = NULL;
+	step_ptr->optimise_for_energy = optmise_for_energy;
+
 	step_ptr->check_job    = check_tmp;
 	step_ptr->cpu_freq_min = cpu_freq_min;
 	step_ptr->cpu_freq_max = cpu_freq_max;
@@ -4328,6 +4396,11 @@ unpack_error:
 	xfree(tres_per_node);
 	xfree(tres_per_socket);
 	xfree(tres_per_task);
+	xfree(filesystem_device);
+	xfree(filesystem_type);
+	xfree(filesystem_mountpoint);
+	xfree(filesystem_size);
+	xfree(service_type);
 
 	return SLURM_FAILURE;
 }
@@ -4469,6 +4542,11 @@ static void _signal_step_timelimit(struct job_record *job_ptr,
 	kill_step->start_time = job_ptr->start_time;
 	kill_step->select_jobinfo = select_g_select_jobinfo_copy(
 			job_ptr->select_jobinfo);
+	kill_step->filesystem_type       = xstrdup(job_ptr->filesystem_type);		// NEXTGenIO
+	kill_step->filesystem_mountpoint = xstrdup(job_ptr->filesystem_mountpoint);	// NEXTGenIO
+	kill_step->filesystem_device     = xstrdup(job_ptr->filesystem_device);		// NEXTGenIO
+	kill_step->service_type          = xstrdup(job_ptr->service_type);			// NEXTGenIO
+	kill_step->optimise_for_energy   = job_ptr->optimise_for_energy;			// NEXTGenIO
 
 #ifdef HAVE_FRONT_END
 	xassert(job_ptr->batch_host);

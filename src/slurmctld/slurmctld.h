@@ -582,6 +582,19 @@ struct job_details {
 	char *x11_magic_cookie;		/* x11 magic cookie */
 	/* no x11_target_host, alloc_node is the same */
 	uint16_t x11_target_port;	/* target TCP port on alloc_node */
+	uint32_t workflow_id;			/* workflow ID, default set by Slurm */		// NEXTGenIO
+	uint16_t workflow_start;		/* Is this the start of a workflow? */		// NEXTGenIO
+	char *workflow_prior_dependency;	/* Depends on JOB IDs */				// NEXTGenIO
+	char *workflow_post_dependency;		/* Dependent JOB IDs */					// NEXTGenIO
+	uint16_t workflow_end;			/* Is this the end of a workflow? */		// NEXTGenIO
+	char *filesystem_device;			/* filesystem device */	// NEXTGenIO
+	char *filesystem_type;			/* filesystem type */		// NEXTGenIO
+	char *filesystem_mountpoint;	/* filesystem mountpoint */	// NEXTGenIO
+	char *filesystem_size;			/* filesystem size */		// NEXTGenIO
+	char *service_type;				/* service type */			// NEXTGenIO
+	uint8_t optimise_for_energy; 	/* optimise for energy */	// NEXTGenIO
+	uint16_t nvram_mode;			/* NVRAM mode */			// NEXTGenIO
+	uint32_t nvram_size;			/* NVRAM size */			// NEXTGenIO
 };
 
 typedef struct job_array_struct {
@@ -867,6 +880,20 @@ struct job_record {
 	uint32_t wait4switch; /* Maximum time to wait for minimum switches */
 	bool     best_switch; /* true=min number of switches met           */
 	time_t wait4switch_start; /* Time started waiting for switch       */
+	uint32_t workflow_id;		/* workflow ID, default set by Slurm */	// NEXTGenIO
+	uint16_t workflow_start;	/* Is this the start of a workflow? */ 	// NEXTGenIO
+	char *workflow_prior_dependency;	/* Depends on JOB IDs */		// NEXTGenIO
+	char *workflow_post_dependency;		/* Dependent JOB IDs */			// NEXTGenIO
+	uint16_t workflow_end;		/* Is this the end of a workflow? */	// NEXTGenIO
+	char *filesystem_device;		/* filesystem device */		// NEXTGenIO
+	char *filesystem_type;			/* filesystem type */		// NEXTGenIO
+	char *filesystem_mountpoint;	/* filesystem mountpoint */	// NEXTGenIO
+	char *filesystem_size;			/* filesystem size */		// NEXTGenIO
+	char *service_type;				/* service type */			// NEXTGenIO
+	uint8_t optimise_for_energy; 	/* optimise for energy */	// NEXTGenIO
+	uint16_t bumped;	/* times that we reduced priority */	// NEXTGenIO
+	uint16_t nvram_mode;	/* NVRAM mode */		// NEXTGenIO
+	uint32_t nvram_size;	/* NVRAM size */		// NEXTGenIO
 };
 
 /* Job dependency specification, used in "depend_list" within job_record */
@@ -919,6 +946,10 @@ struct 	step_record {
 	uint32_t exit_code;		/* highest exit code from any task */
 	bitstr_t *exit_node_bitmap;	/* bitmap of exited nodes */
 	ext_sensors_data_t *ext_sensors; /* external sensors plugin data */
+	char *filesystem_device;		/* Device of filesystem to create */// NEXTGenIO
+	char *filesystem_type;			/* Type of filesystem to create */	// NEXTGenIO
+	char *filesystem_mountpoint;	/* Mountpoint of filesystem */ 		// NEXTGenIO
+	char *filesystem_size;			/* Size of filesystem */ 			// NEXTGenIO
 	List gres_list;			/* generic resource allocation detail */
 	char *host;			/* host for srun communications */
 	struct job_record* job_ptr; 	/* ptr to the job that owns the step */
@@ -944,6 +975,8 @@ struct 	step_record {
 	time_t start_time;		/* step allocation start time */
 	uint32_t time_limit;	  	/* step allocation time limit */
 	dynamic_plugin_data_t *select_jobinfo;/* opaque data, BlueGene */
+	char *service_type;				/* Type of service to start */ 				// NEXTGenIO
+	uint8_t optimise_for_energy; 	/* optimise for energy */					// NEXTGenIO
 	uint32_t srun_pid;		/* PID of srun (also see host/port) */
 	uint32_t state;			/* state of the step. See job_states */
 	uint32_t step_id;		/* step number */
@@ -1368,6 +1401,20 @@ extern int job_allocate(job_desc_msg_t * job_specs, int immediate,
 			int allocate, uid_t submit_uid,
 			struct job_record **job_pptr,
 			char **err_msg, uint16_t protocol_version);
+
+/*
+ * _workflows_set_dependencies - sets the workflow dependencies
+ * IN / OUT job_ptr - pointer to job record
+ * RET 0 or an error code.
+ */
+extern int _workflows_set_dependencies(struct job_record *job_ptr);
+
+/*
+ * _workflows_job_complete - sets the workflow dependencies once a job is complete
+ * IN / OUT job_ptr - pointer to job record
+ * RET 0 or an error code.
+ */
+extern int _workflows_job_complete(struct job_record *job_ptr);
 
 /* If this is a job array meta-job, prepare it for being scheduled */
 extern void job_array_pre_sched(struct job_record *job_ptr);

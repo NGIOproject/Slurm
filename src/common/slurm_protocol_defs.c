@@ -840,6 +840,10 @@ extern void slurm_free_job_desc_msg(job_desc_msg_t *msg)
 		xfree(msg->extra);
 		xfree(msg->exc_nodes);
 		xfree(msg->features);
+		xfree(msg->filesystem_device);		// NEXTGenIO
+		xfree(msg->filesystem_type);		// NEXTGenIO
+		xfree(msg->filesystem_mountpoint);	// NEXTGenIO
+		xfree(msg->filesystem_size);		// NEXTGenIO
 		xfree(msg->cluster_features);
 		xfree(msg->job_id_str);
 		xfree(msg->licenses);
@@ -859,6 +863,7 @@ extern void slurm_free_job_desc_msg(job_desc_msg_t *msg)
 		free_buf(msg->script_buf);
 		select_g_select_jobinfo_free(msg->select_jobinfo);
 		msg->select_jobinfo = NULL;
+		xfree(msg->service_type);			// NEXTGenIO
 		xfree(msg->std_err);
 		xfree(msg->std_in);
 		xfree(msg->std_out);
@@ -917,6 +922,13 @@ extern void slurm_free_prolog_launch_msg(prolog_launch_msg_t * msg)
 		xfree(msg->x11_magic_cookie);
 		xfree(msg->x11_target_host);
 
+		// NEXTGenIO
+		xfree(msg->filesystem_type);
+		xfree(msg->filesystem_device);
+		xfree(msg->filesystem_mountpoint);
+		xfree(msg->filesystem_size);
+		xfree(msg->service_type);
+
 		if (msg->spank_job_env) {
 			for (i = 0; i < msg->spank_job_env_size; i++)
 				xfree(msg->spank_job_env[i]);
@@ -957,6 +969,10 @@ extern void slurm_free_job_launch_msg(batch_job_launch_msg_t * msg)
 				xfree(msg->environment[i]);
 			xfree(msg->environment);
 		}
+		xfree(msg->filesystem_device);		// NEXTGenIO
+		xfree(msg->filesystem_type);		// NEXTGenIO
+		xfree(msg->filesystem_mountpoint);	// NEXTGenIO
+		xfree(msg->filesystem_size);		// NEXTGenIO
 		xfree(msg->gids);
 		xfree(msg->nodes);
 		xfree(msg->partition);
@@ -966,6 +982,7 @@ extern void slurm_free_job_launch_msg(batch_job_launch_msg_t * msg)
 		xfree(msg->script);
 		free_buf(msg->script_buf);
 		select_g_select_jobinfo_free(msg->select_jobinfo);
+		xfree(msg->service_type);			// NEXTGenIO
 		if (msg->spank_job_env) {
 			for (i = 0; i < msg->spank_job_env_size; i++)
 				xfree(msg->spank_job_env[i]);
@@ -1226,6 +1243,12 @@ extern void slurm_free_job_step_create_request_msg(
 		xfree(msg->tres_per_node);
 		xfree(msg->tres_per_socket);
 		xfree(msg->tres_per_task);
+		// NEXTGenIO
+		xfree(msg->filesystem_device);
+		xfree(msg->filesystem_type);
+		xfree(msg->filesystem_mountpoint);
+		xfree(msg->filesystem_size);
+		xfree(msg->service_type);
 		xfree(msg);
 	}
 }
@@ -1263,6 +1286,10 @@ extern void slurm_free_kill_job_msg(kill_job_msg_t * msg)
 	if (msg) {
 		int i;
 		xfree(msg->nodes);
+		xfree(msg->filesystem_device);		// NEXTGenIO
+		xfree(msg->filesystem_mountpoint);	// NEXTGenIO
+		xfree(msg->filesystem_type);		// NEXTGenIO
+		xfree(msg->service_type);			// NEXTGenIO
 		select_g_select_jobinfo_free(msg->select_jobinfo);
 		msg->select_jobinfo = NULL;
 
@@ -1359,6 +1386,13 @@ extern void slurm_free_launch_tasks_request_msg(launch_tasks_request_msg_t * msg
 	xfree(msg->tres_freq);
 	xfree(msg->x11_magic_cookie);
 	xfree(msg->x11_target_host);
+
+	// NEXTGenIO
+	xfree(msg->filesystem_device);
+	xfree(msg->filesystem_type);
+	xfree(msg->filesystem_mountpoint);
+	xfree(msg->filesystem_size);
+	xfree(msg->service_type);
 
 	xfree(msg);
 }
@@ -1657,6 +1691,8 @@ extern char *job_reason_string(enum job_state_reason inx)
 		return "InvalidAccount";
 	case FAIL_QOS:
 		return "InvalidQOS";
+	case FAIL_WORKFLOWS:
+		return "WorkflowsFailure";	// NEXTGenIO
 	case WAIT_QOS_THRES:
 		return "QOSUsageThreshold";
 	case WAIT_QOS_JOB_LIMIT:
@@ -1996,6 +2032,8 @@ extern char *job_reason_string(enum job_state_reason inx)
 		return "QOSMinBilling";
 	case WAIT_RESV_DELETED:
 		return "ReservationDeleted";
+	case WAIT_WORKFLOWS:
+		return "Workflows";		// NEXTGenIO
 	default:
 		snprintf(val, sizeof(val), "%d", inx);
 		return val;
@@ -3608,6 +3646,12 @@ extern void slurm_free_job_step_info_members(job_step_info_t * msg)
 		xfree(msg->tres_per_node);
 		xfree(msg->tres_per_socket);
 		xfree(msg->tres_per_task);
+		// NEXTGenIO
+		xfree(msg->filesystem_device);
+		xfree(msg->filesystem_type);
+		xfree(msg->filesystem_mountpoint);
+		xfree(msg->filesystem_size);
+		xfree(msg->service_type);
 	}
 }
 
@@ -5216,6 +5260,32 @@ extern int parse_part_enforce_type(char *enforce_part_type, uint16_t *param)
 	} else {
 		error("Bad EnforcePartLimits: %s\n", value);
 		rc = SLURM_FAILURE;
+	}
+
+	xfree(value);
+	return rc;
+}
+
+// NEXTGenIO
+extern int parse_metascheduler_type(char *enforce_part_type)
+{
+	int rc = SLURM_SUCCESS;
+	bool foundMatch = false;
+
+	char *value = xstrdup(enforce_part_type);
+
+	if (xstrcasecmp(value, "optimise-for-energy") == 0 ) {
+		debug2("%s: found match %s", __func__, value);
+		foundMatch = true;
+	} else if (xstrcasecmp(value, "optimise-for-io") == 0 ) {
+		debug2("%s: found match %s", __func__, value);
+		foundMatch = true;
+	}
+
+	if ( !foundMatch ) {
+		error("%s: unrecognised MetaScheduler type \"%s\"", __func__, value);
+		xfree(value);
+		return -1;
 	}
 
 	xfree(value);

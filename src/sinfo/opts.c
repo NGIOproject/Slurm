@@ -324,7 +324,7 @@ extern void parse_command_line(int argc, char **argv)
 			params.node_field_flag = true;	/* compute size later */
 			params.part_field_flag = true;	/* compute size later */
 			params.format = params.long_output ?
-			  "%N %.6D %.9P %.11T %.4c %.8z %.6m %.8d %.6w %.8f %20E" :
+			  "%N %.6D %.9P %.11T %.4c %.8z %.6m %.8d %.6w %.16f %20E" :
 			  "%N %.6D %.9P %6t";
 
 		} else if (params.list_reasons) {
@@ -770,6 +770,12 @@ _parse_format( char* format )
 					field_size,
 					right_justify,
 					suffix );
+		} else if (field[0] == 'q') {					// NEXTGenIO
+			params.match_flags.nvram_flag = true;
+			format_add_nvram( params.format_list,
+					field_size,
+					right_justify,
+					suffix );
 		} else if (field[0] == 'r') {
 			params.match_flags.root_flag = true;
 			format_add_root( params.format_list,
@@ -1031,6 +1037,12 @@ static int _parse_long_format (char* format_long)
 						   suffix );
 		} else if (!xstrcasecmp(token, "nodelist")) {
 			format_add_node_list( params.format_list,
+					      field_size,
+					      right_justify,
+					      suffix );
+		} else if (!xstrcasecmp(token, "nvram")) {		// NEXTGenIO
+			params.match_flags.nvram_flag = true;
+			format_add_nvram( params.format_list,
 					      field_size,
 					      right_justify,
 					      suffix );
@@ -1306,6 +1318,8 @@ void _print_options( void )
 					"true" : "false");
 	printf("memory_flag     = %s\n", params.match_flags.memory_flag ?
 			"true" : "false");
+	printf("nvram_flag      = %s\n", params.match_flags.nvram_flag ?
+			"true" : "false");											// NEXTGenio
 	printf("partition_flag  = %s\n", params.match_flags.partition_flag ?
 			"true" : "false");
 	printf("port_flag       = %s\n", params.match_flags.port_flag ?

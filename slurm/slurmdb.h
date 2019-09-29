@@ -306,6 +306,7 @@ typedef struct {
 	char *used_nodes;       /* a ranged node string where jobs ran */
 	List userid_list;	/* list of char * */
 	List wckey_list;	/* list of char * */
+	List workflow_list; /* list of char * NEXTGenIO */
 } slurmdb_job_cond_t;
 
 /* slurmdb_stats_t needs to be defined before slurmdb_job_rec_t and
@@ -801,6 +802,12 @@ typedef struct {
 	char    *wckey;
 	uint32_t wckeyid;
 	char    *work_dir;
+	/* NEXTGenIO */
+	uint32_t workflow_id;
+	char    *workflow_prior;
+	char    *workflow_post;
+	uint16_t workflow_start;
+	uint16_t workflow_end;
 } slurmdb_job_rec_t;
 
 typedef struct {
