@@ -1097,6 +1097,7 @@ static void _filter_by_node_feature(struct job_record *job_ptr,
 				    struct node_set *node_set_ptr,
 				    int node_set_size)
 {
+	char *node_list;
 	int i;
 
 	if ((job_ptr->details == NULL) ||
@@ -1107,6 +1108,10 @@ static void _filter_by_node_feature(struct job_record *job_ptr,
 
 	for (i = 0; i < node_set_size; i++) {
 		if (node_set_ptr[i].flags & NODE_SET_REBOOT) {
+			node_list = bitmap2node_name(node_set_ptr[i].my_bitmap);
+			debug3("%s: Job:%d, Nodes:%s with features:%s have been removed due to delay_boot",
+					 __func__, job_ptr->job_id, node_list, node_set_ptr[i].features);
+			xfree(node_list);
 			bit_and_not(avail_node_bitmap,
 				    node_set_ptr[i].my_bitmap);
 		}
@@ -3453,7 +3458,7 @@ extern bool valid_feature_counts(struct job_record *job_ptr, bool use_active,
 {
 	char tmp[32];
 	bit_fmt(tmp, sizeof(tmp), node_bitmap);
-	info("%s: RC:%d NODE_BITMAP:%s", __func__, rc, tmp);
+	info("%s: RC:%d, xor:%d, NODE_BITMAP:%s", __func__, rc, *has_xor, tmp);
 }
 #endif
 	return rc;
@@ -3753,6 +3758,10 @@ static int _build_node_list(struct job_record *job_ptr,
 						__func__, config_ptr->nodes, detail_ptr->nvram_size,
 						config_ptr->nvram_capacity, config_ptr->nvram_appdirect_capacity, config_ptr->nvram_memory_capacity);
 			    	nvram_ok = true;
+			} else {
+				debug3("%s: NO match (%s) (%d) (Capacity:%d, AppDirect:%d, Memory:%d)",
+						__func__, config_ptr->nodes, detail_ptr->nvram_size,
+						config_ptr->nvram_capacity, config_ptr->nvram_appdirect_capacity, config_ptr->nvram_memory_capacity);
 			}
 		} else {
 			nvram_ok = true;
@@ -4155,7 +4164,7 @@ static void _log_node_set(struct job_record *job_ptr,
 			  int node_set_size)
 {
 /* Used for debugging purposes only */
-#if _DEBUG
+//#if _DEBUG
 	char *node_list, feature_bits[64];
 	int i;
 
@@ -4173,7 +4182,7 @@ static void _log_node_set(struct job_record *job_ptr,
 		     node_set_ptr[i].sched_weight);
 		xfree(node_list);
 	}
-#endif
+//#endif
 }
 
 static void _set_err_msg(bool cpus_ok, bool mem_ok, bool disk_ok,

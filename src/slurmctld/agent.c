@@ -1000,7 +1000,11 @@ static void *_thread_per_group_rpc(void *args)
 			reset_node_load(ret_data_info->node_name,
 					ping_resp->cpu_load);
 			reset_node_free_mem(ret_data_info->node_name,
-					    ping_resp->free_mem);
+					ping_resp->free_mem);
+			reset_node_free_mem_nvram(ret_data_info->node_name,
+				    ping_resp->free_mem_nvram);
+			reset_node_free_mem_space(ret_data_info->node_name,
+				    ping_resp->free_space_nvram_0, ping_resp->free_space_nvram_1);
 			unlock_slurmctld(node_write_lock);
 		}
 		/* SPECIAL CASE: Mark node as IDLE if job already complete */

@@ -1,6 +1,27 @@
 This file describes changes in recent versions of Slurm. It primarily
 documents those changes that are of interest to users and administrators.
 
+* Changes in Slurm 18.08.8 - 1.6.0
+==================================
+-- Added workflows duration output in sacct
+-- Added NEXTGenIO Disclaimer
+
+* Changes in Slurm 18.08.8 - 1.5.0
+==================================
+-- Added global optimise-for-energy option to the MetaScheduler
+-- Reintroduced workflows that run on the same nodes
+
+* Changes in Slurm 18.08.8 - 1.4.0
+==================================
+-- Fixed printout for Job info and Job Step info
+-- Fixed srun logic
+
+* Changes in Slurm 18.08.8 - 1.3.0 
+==================================
+ -- Re-introduced missing functionality for sbatch/salloc when using nvram-options
+ -- Added collection of NVRAM free Memory and Space (using the Ping message)
+ -- Added constraint in srun, sbatch, salloc that nvram-options must be used on NVRAM enabled clusters.
+ -- Added support to display NVRAM free Memory and Space in sinfo and scontrol
 
 * Changes in Slurm 18.08.8 - 1.2.0
 ==================================

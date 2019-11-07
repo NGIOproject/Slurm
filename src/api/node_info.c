@@ -449,8 +449,10 @@ char *slurm_sprint_node_table(node_info_t *node_ptr, int one_liner)
 	if (node_ptr->nvram_capacity == NO_VAL)
 		xstrcat(out, "Total NVRAM=N/A Free NVRAM=N/A");
 	else
-		xstrfmtcat(out, "Total NVRAM=%u Memory Capacity=%u, AppDirect Capacity=%u",
-				node_ptr->nvram_capacity, node_ptr->nvram_memory_capacity, node_ptr->nvram_appdirect_capacity);
+		xstrfmtcat(out, "Total NVRAM=%u Memory Capacity=%u (%u), AppDirect Capacity=%u (%u/%u)",
+				node_ptr->nvram_capacity,
+				node_ptr->nvram_memory_capacity, node_ptr->free_mem_nvram,
+				node_ptr->nvram_appdirect_capacity, node_ptr->free_space_nvram_0, node_ptr->free_space_nvram_1);
 
 	xstrcat(out, line_end);
 

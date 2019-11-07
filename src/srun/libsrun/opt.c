@@ -213,14 +213,15 @@
 #define LONG_OPT_WORKFLOW_START  0x180				// NEXTGenIO
 #define LONG_OPT_WORKFLOW_PRIOR_DEPENDENCY 0x181	// NEXTGenIO
 #define LONG_OPT_WORKFLOW_END    0x182				// NEXTGenIO
-#define LONG_OPT_FILESYSTEM_DEVICE 0x183			// NEXTGenIO
-#define LONG_OPT_FILESYSTEM_TYPE 0x184				// NEXTGenIO
-#define LONG_OPT_FILESYSTEM_MOUNT 0x185				// NEXTGenIO
-#define LONG_OPT_FILESYSTEM_SIZE 0x186				// NEXTGenIO
-#define LONG_OPT_SERVICE_TYPE    0x187				// NEXTGenIO
-#define LONG_OPT_NVRAM_OPTIONS   0x188				// NEXTGenIO
-#define LONG_OPT_MAP_JSON        0x189				// NEXTGenIO
-#define LONG_OPT_OPTIMISE_FOR_ENERGY 0x190			// NEXTGenIO
+#define LONG_OPT_WORKFLOW_SAME_NODES 0x183			// NEXTGenIO
+#define LONG_OPT_FILESYSTEM_DEVICE 0x184			// NEXTGenIO
+#define LONG_OPT_FILESYSTEM_TYPE 0x185				// NEXTGenIO
+#define LONG_OPT_FILESYSTEM_MOUNT 0x186				// NEXTGenIO
+#define LONG_OPT_FILESYSTEM_SIZE 0x187				// NEXTGenIO
+#define LONG_OPT_SERVICE_TYPE    0x188				// NEXTGenIO
+#define LONG_OPT_NVRAM_OPTIONS   0x189				// NEXTGenIO
+#define LONG_OPT_MAP_JSON        0x190				// NEXTGenIO
+#define LONG_OPT_OPTIMISE_FOR_ENERGY 0x191			// NEXTGenIO
 
 extern char **environ;
 
@@ -378,6 +379,7 @@ struct option long_options[] = {
 	{"workflow-start",optional_argument, 0,        LONG_OPT_WORKFLOW_START},	// NEXTGenIO
 	{"workflow-prior-dependency",optional_argument, 0, LONG_OPT_WORKFLOW_PRIOR_DEPENDENCY},	// NEXTGenIO
 	{"workflow-end",  optional_argument, 0,        LONG_OPT_WORKFLOW_END},		// NEXTGenIO
+	{"workflow-same-nodes", optional_argument, 0, LONG_OPT_WORKFLOW_SAME_NODES}, // NEXTGenIO
 	{"filesystem-device",optional_argument, 0,     LONG_OPT_FILESYSTEM_DEVICE},	// NEXTGenIO
 	{"filesystem-type",optional_argument, 0,       LONG_OPT_FILESYSTEM_TYPE},	// NEXTGenIO
 	{"filesystem-mountpoint",optional_argument, 0, LONG_OPT_FILESYSTEM_MOUNT},	// NEXTGenIO
@@ -1020,6 +1022,7 @@ static void _opt_default(void)
 	xfree(opt.workflow_prior_dependency);
 	xfree(opt.workflow_post_dependency);
 	opt.workflow_end	= false;
+	opt.workflow_same_nodes = false;
 	xfree(opt.filesystem_device);
 	xfree(opt.filesystem_type);
 	xfree(opt.filesystem_mountpoint);
@@ -2456,6 +2459,9 @@ static void _set_options(const int argc, char **argv)
 		case LONG_OPT_WORKFLOW_END:					// NEXTGenIO
 			opt.workflow_end = true;
 			break;
+		case LONG_OPT_WORKFLOW_SAME_NODES:
+			opt.workflow_same_nodes = true;
+			break;
 		case LONG_OPT_FILESYSTEM_DEVICE:			// NEXTGenIO
 			if (!optarg)
 				break;	/* Fix for Coverity false positive */
@@ -3097,6 +3103,10 @@ static bool _opt_verify(void)
 			error("Incompatible workflow options (START and Prior Job ID or END)");
 			exit(error_exit);
 		}
+		if (opt.dependency) {
+			error("Incompatible workflow options and dependencies");
+			exit(error_exit);
+		}
 	// ToDo: NEXTGenIO add more logic
 	}
 
@@ -3105,12 +3115,31 @@ static bool _opt_verify(void)
 			error("Incompatible workflow options (END and START or no Prior Job ID)");
 			exit(error_exit);
 		}
+		if (opt.dependency) {
+			error("Incompatible workflow options and dependencies");
+			exit(error_exit);
+		}
 	// ToDo: NEXTGenIO add more logic
+	}
+
+	if (opt.workflow_same_nodes == true) {
+		if ( !(opt.workflow_prior_dependency) && (opt.workflow_start != true) && (opt.workflow_end != true) ) {
+			error("Workflow option same nodes cannot be used standalone");
+			exit(error_exit);
+		}
+		if (opt.nodelist) {
+			error("Workflow option same nodes cannot be used with a nodelist");
+			exit(error_exit);
+		}
 	}
 
 	if (opt.workflow_prior_dependency) {
 		if (opt.workflow_start != false) {
 			error("Incompatible workflow options (Prior Job ID and START)");
+			exit(error_exit);
+		}
+		if (opt.dependency) {
+			error("Incompatible workflow options and dependencies");
 			exit(error_exit);
 		}
 		if ( opt.jobid != NO_VAL ) {
@@ -3509,7 +3538,7 @@ static void _opt_list(void)
 	info("preserve_env   : %s", tf_(sropt.preserve_env));
 
 	info("network        : %s", opt.network);
-	info("energy optimise: %s", opt.optimise_for_energy ? "no" : "yes");		// NEXTGenIO
+	info("energy optimise: %s", opt.optimise_for_energy ? "yes" : "no");		// NEXTGenIO
 	info("propagate      : %s",
 	     sropt.propagate == NULL ? "NONE" : sropt.propagate);
 	if (opt.begin) {
@@ -3570,6 +3599,7 @@ static void _opt_list(void)
 	info("workflow_start    : %s", opt.workflow_start ? "yes" : "no");
 	info("workflow_prior_dependency   : %s", opt.workflow_prior_dependency);
 	info("workflow_end      : %s", opt.workflow_end   ? "yes" : "no");
+	info("workflow_same_nodes: %s", opt.workflow_same_nodes   ? "yes" : "no");	// NEXTGenIO
 
 	info("filesystem device : %s", opt.filesystem_device);
 	info("filesystem type   : %s", opt.filesystem_type);
@@ -3652,7 +3682,7 @@ static void _usage(void)
 "            [--acctg-freq=<datatype>=<interval>] [--delay-boot=mins]\n"
 "            [-w hosts...] [-x hosts...] [--use-min-nodes]\n"
 "            [--mpi-combine=yes|no] [--pack-group=value]\n"
-"            [--workflow_start] [--workflow_prior_dependency=job_id] [--workflow_end]\n"
+"            [--workflow-start] [--workflow-prior-dependency=job_id] [--workflow-end] [--workflow-same-nodes]\n"
 "            [--filesystem-device] [--filesystem-type] [--filesystem-mountpoint] [--filesystem-size]\n"
 "            [--service-type] [--nvram-options=mode:size] [--map-json=filename]\n"			// NEXTGenIO
 "            [--optimise-for-energy]\n"
@@ -3785,6 +3815,7 @@ static void _help(void)
 "      --workflow-start        indicate that this the first job in a workflow\n"
 "      --workflow-prior-dependency=jobid indicate that this is a subsequent job in a workflow\n"
 "      --workflow-end          indicate that this is the last job in a workflow\n"
+"      --workflow-same-nodes   indicate that this workflow job should try to use the same nodes\n"
 "  -X, --disable-status        Disable Ctrl-C status feature\n"
 "\n"
 "Constraint options:\n"

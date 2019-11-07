@@ -992,8 +992,9 @@ slurm_sprint_job_info ( job_info_t * job_ptr, int one_liner )
 	/****** Line (optional) NEXTGenIO ******/
 	if (job_ptr->workflow_id != NO_VAL) {
 		xstrcat(out, line_end);
-		xstrfmtcat(out, "Workflow ID=%u, Start=%u, PRIOR=%s, POST=%s, End=%u",
-			   job_ptr->workflow_id, job_ptr->workflow_start, job_ptr->workflow_prior_dependency,
+		xstrfmtcat(out, "Workflow ID=%u, SameNodes=%s, Start=%u, PRIOR=%s, POST=%s, End=%u",
+			   job_ptr->workflow_id, job_ptr->workflow_same_nodes ? "yes" : "no",
+			   job_ptr->workflow_start, job_ptr->workflow_prior_dependency,
 			   job_ptr->workflow_post_dependency, job_ptr->workflow_end);
 	}
 
@@ -1014,7 +1015,7 @@ slurm_sprint_job_info ( job_info_t * job_ptr, int one_liner )
 	}
 
 	xstrcat(out, line_end);
-	xstrfmtcat(out, "Optimise for energy=%s", job_ptr->optimise_for_energy ? "no" : "yes");
+	xstrfmtcat(out, "Optimise for energy=%s", job_ptr->optimise_for_energy ? "yes" : "no");
 
 	/****** END OF JOB RECORD ******/
 	if (one_liner)

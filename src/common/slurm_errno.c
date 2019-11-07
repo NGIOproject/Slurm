@@ -536,7 +536,11 @@ static slurm_errtab_t slurm_errtab[] = {
 	{ ESLURM_SERVICE_START_FAIL,
 	  "Failed to start Service"                                       },
 	{ ESLURM_SERVICE_STOP_FAIL,
-	  "Failed to stop Service"                                        }
+	  "Failed to stop Service"                                        },
+    { ESLURM_NVRAM_OPTIONS_REQUIRED,
+	  "NVRAM options must be used with NVRAM clusters"                },
+	{ ESLURM_NVRAM_OPTIONS_NOT_REQUIRED,
+	  "NVRAM options must not be used with non NVRAM clusters"        }
 
 };
 

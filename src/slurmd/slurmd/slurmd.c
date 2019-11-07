@@ -711,6 +711,8 @@ _fill_registration_msg(slurm_node_registration_status_msg_t *msg)
 		get_nvram_memory(&msg->nvram_capacity, &msg->nvram_memory_capacity, &msg->nvram_appdirect_capacity, true);	// NEXTGenIO
 	}
 	get_namespaces(&msg->nvram_number_of_namespaces);
+	get_free_mem_nvram(&msg->free_mem_nvram);
+	get_free_space_nvram(&msg->free_space_nvram_0, &msg->free_space_nvram_1);
 
 	gres_info = init_buf(1024);
 	if (gres_plugin_node_config_pack(gres_info) != SLURM_SUCCESS)
@@ -921,6 +923,8 @@ _read_config(void)
 		get_nvram_memory(&conf->nvram_capacity, &conf->nvram_memory_capacity, &conf->nvram_appdirect_capacity, false);	// NEXTGenIO
 	}
 	get_namespaces(&conf->nvram_number_of_namespaces);
+	get_free_mem_nvram(&conf->free_mem_nvram);
+	get_free_space_nvram(&conf->free_space_nvram_0, &conf->free_space_nvram_1);
 
 	/*
 	 * This must be reset before _update_logging(), otherwise the
@@ -1387,8 +1391,13 @@ _print_config(void)
 		get_nvram_memory(&conf->nvram_capacity, &conf->nvram_memory_capacity, &conf->nvram_appdirect_capacity, false);	// NEXTGenIO
 	}
 	get_namespaces(&conf->nvram_number_of_namespaces);
-	printf("NVRAM=%u (Total:%u, Memory Capacity:%u, AppDirect Capacity:%u)",
-			conf->has_nvram, conf->nvram_capacity, conf->nvram_memory_capacity, conf->nvram_appdirect_capacity);	// NEXTGenIO
+	get_free_mem_nvram(&conf->free_mem_nvram);
+	get_free_space_nvram(&conf->free_space_nvram_0, &conf->free_space_nvram_1);
+
+	printf("NVRAM=%u (Total:%u, Memory Capacity:%u (%d), AppDirect Capacity:%u (%d/%d)",
+			conf->has_nvram, conf->nvram_capacity,
+			conf->nvram_memory_capacity, conf->free_mem_nvram,
+			conf->nvram_appdirect_capacity, conf->free_space_nvram_0, conf->free_space_nvram_1);	// NEXTGenIO
 	printf("Number of Partitions=%u", conf->nvram_number_of_namespaces);	// NEXTGenIO
 
 	fini_system_nvram();

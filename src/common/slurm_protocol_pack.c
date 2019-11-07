@@ -3406,6 +3406,9 @@ _pack_node_registration_status_msg(slurm_node_registration_status_msg_t *
 		pack32(msg->nvram_memory_capacity, buffer);		// NEXTGenIO
 		pack32(msg->nvram_appdirect_capacity, buffer);	// NEXTGenIO
 		pack16(msg->nvram_number_of_namespaces, buffer);// NEXTGenIO
+		pack32(msg->free_mem_nvram, buffer);			// NEXTGenIO
+		pack32(msg->free_space_nvram_0, buffer);		// NEXTGenIO
+		pack32(msg->free_space_nvram_1, buffer);		// NEXTGenIO
 
 		pack32(msg->job_count, buffer);
 		for (i = 0; i < msg->job_count; i++) {
@@ -3481,6 +3484,9 @@ _unpack_node_registration_status_msg(slurm_node_registration_status_msg_t
 		safe_unpack32(&node_reg_ptr->nvram_memory_capacity, buffer);		// NEXTGenIO
 		safe_unpack32(&node_reg_ptr->nvram_appdirect_capacity, buffer);		// NEXTGenIO
 		safe_unpack16(&node_reg_ptr->nvram_number_of_namespaces, buffer);	// NEXTGenIO
+		safe_unpack32(&node_reg_ptr->free_mem_nvram, buffer);				// NEXTGenIO
+		safe_unpack32(&node_reg_ptr->free_space_nvram_0, buffer);			// NEXTGenIO
+		safe_unpack32(&node_reg_ptr->free_space_nvram_1, buffer);			// NEXTGenIO
 
 		safe_unpack32(&node_reg_ptr->job_count, buffer);
 		if (node_reg_ptr->job_count > NO_VAL)
@@ -3573,6 +3579,8 @@ _pack_resource_allocation_response_msg(resource_allocation_response_msg_t *msg,
 		pack64(msg->pn_min_memory, buffer);
 		packstr(msg->qos, buffer);
 		packstr(msg->resv_name, buffer);
+		pack16(msg->nvram_mode, buffer);		// NEXTGenIO
+		pack32(msg->nvram_size, buffer);		// NEXTGenIO
 		select_g_select_jobinfo_pack(msg->select_jobinfo,
 					     buffer,
 					     protocol_version);
@@ -3698,6 +3706,8 @@ _unpack_resource_allocation_response_msg(
 		safe_unpackstr_xmalloc(&tmp_ptr->qos, &uint32_tmp, buffer);
 		safe_unpackstr_xmalloc(&tmp_ptr->resv_name, &uint32_tmp,
 				       buffer);
+		safe_unpack16(&tmp_ptr->nvram_mode, buffer);		// NEXTGenIO
+		safe_unpack32(&tmp_ptr->nvram_size, buffer);		// NEXTGenIO
 		if (select_g_select_jobinfo_unpack(&tmp_ptr->select_jobinfo,
 						   buffer, protocol_version))
 			goto unpack_error;
@@ -4026,6 +4036,9 @@ _unpack_node_info_members(node_info_t * node, Buf buffer,
 		safe_unpack32(&node->nvram_memory_capacity, buffer);	// NEXTGenIO
 		safe_unpack32(&node->nvram_appdirect_capacity, buffer);	// NEXTGenIO
 		safe_unpack16(&node->nvram_number_of_namespaces, buffer);// NEXTGenIO
+		safe_unpack32(&node->free_mem_nvram, buffer);			// NEXTGenIO
+		safe_unpack32(&node->free_space_nvram_0, buffer);		// NEXTGenIO
+		safe_unpack32(&node->free_space_nvram_1, buffer);		// NEXTGenIO
 	} else if (protocol_version >= SLURM_MIN_PROTOCOL_VERSION) {
 		safe_unpackstr_xmalloc(&node->name, &uint32_tmp, buffer);
 		safe_unpackstr_xmalloc(&node->node_hostname, &uint32_tmp,
@@ -6228,6 +6241,7 @@ _unpack_job_info_members(job_info_t * job, Buf buffer,
 		safe_unpackstr_xmalloc(&job->workflow_post_dependency,
 						&uint32_tmp, buffer);
 		safe_unpack16(&job->workflow_end, buffer);
+		safe_unpack8(&job->workflow_same_nodes, buffer);
 		safe_unpackstr_xmalloc(&job->filesystem_device,
 						&uint32_tmp, buffer);
 		safe_unpackstr_xmalloc(&job->filesystem_type,
@@ -8956,6 +8970,7 @@ _pack_job_desc_msg(job_desc_msg_t * job_desc_ptr, Buf buffer,
 		packstr(job_desc_ptr->workflow_prior_dependency, buffer);
 		packstr(job_desc_ptr->workflow_post_dependency, buffer);
 		pack16(job_desc_ptr->workflow_end, buffer);
+		pack8(job_desc_ptr->workflow_same_nodes, buffer);
 		packstr(job_desc_ptr->filesystem_device, buffer);
 		packstr(job_desc_ptr->filesystem_type, buffer);
 		packstr(job_desc_ptr->filesystem_mountpoint, buffer);
@@ -9429,6 +9444,7 @@ _unpack_job_desc_msg(job_desc_msg_t ** job_desc_buffer_ptr, Buf buffer,
 		safe_unpackstr_xmalloc(&job_desc_ptr->workflow_post_dependency,
 						&uint32_tmp, buffer);
 		safe_unpack16(&job_desc_ptr->workflow_end, buffer);
+		safe_unpack8(&job_desc_ptr->workflow_same_nodes, buffer);
 		safe_unpackstr_xmalloc(&job_desc_ptr->filesystem_device,
 						&uint32_tmp, buffer);
 		safe_unpackstr_xmalloc(&job_desc_ptr->filesystem_type,
@@ -13755,6 +13771,9 @@ static void _pack_ping_slurmd_resp(ping_slurmd_resp_msg_t *msg,
 	if (protocol_version >= SLURM_MIN_PROTOCOL_VERSION) {
 		pack32(msg->cpu_load, buffer);
 		pack64(msg->free_mem, buffer);
+		pack32(msg->free_mem_nvram, buffer);		// NEXTGenIO
+		pack32(msg->free_space_nvram_0, buffer);	// NEXTGenIO
+		pack32(msg->free_space_nvram_1, buffer);	// NEXTGenIO
 	}
 }
 
@@ -13770,6 +13789,9 @@ static int _unpack_ping_slurmd_resp(ping_slurmd_resp_msg_t **msg_ptr,
 	if (protocol_version >= SLURM_MIN_PROTOCOL_VERSION) {
 		safe_unpack32(&msg->cpu_load, buffer);
 		safe_unpack64(&msg->free_mem, buffer);
+		safe_unpack32(&msg->free_mem_nvram, buffer);		// NEXTGenIO
+		safe_unpack32(&msg->free_space_nvram_0, buffer);	// NEXTGenIO
+		safe_unpack32(&msg->free_space_nvram_1, buffer);	// NEXTGenIO
 	}
 
 	return SLURM_SUCCESS;

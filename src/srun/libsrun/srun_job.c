@@ -99,6 +99,8 @@ typedef struct allocation_info {
 	char                   *partition;
 	dynamic_plugin_data_t  *select_jobinfo;
 	uint32_t                stepid;
+	uint16_t nvram_mode;	/* NVRAM mode */				// NEXTGenIO
+	uint32_t nvram_size;	/* NVRAM size */				// NEXTGenIO
 } allocation_info_t;
 
 typedef struct pack_resp_struct {
@@ -1534,6 +1536,9 @@ static srun_job_t *_job_create_structure(allocation_info_t *ainfo,
 	}
 
 	job->rc       = -1;
+	// NEXTGenIO
+	job->nvram_mode = ainfo->nvram_mode;
+	job->nvram_size = ainfo->nvram_size;
 
 	job_update_io_fnames(job, opt_local);
 

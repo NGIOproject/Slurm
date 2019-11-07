@@ -1337,6 +1337,7 @@ static void _dump_job_state(struct job_record *dump_job_ptr, Buf buffer)
 	packstr(dump_job_ptr->workflow_prior_dependency, buffer);
 	packstr(dump_job_ptr->workflow_post_dependency, buffer);
 	pack16(dump_job_ptr->workflow_end, buffer);
+	pack8(dump_job_ptr->workflow_same_nodes, buffer);
 	packstr(dump_job_ptr->filesystem_device, buffer);
 	packstr(dump_job_ptr->filesystem_type, buffer);
 	packstr(dump_job_ptr->filesystem_mountpoint, buffer);
@@ -1461,6 +1462,7 @@ static int _load_job_state(Buf buffer, uint16_t protocol_version)
 	uint32_t pack_job_id = 0, pack_job_offset = 0;
 	uint32_t workflow_id = NO_VAL;
 	uint16_t workflow_start, workflow_end;
+	uint8_t  workflow_same_nodes;
 	uint16_t details, batch_flag, step_flag;
 	uint16_t kill_on_node_fail, direct_set_prio;
 	uint16_t alloc_resp_port, other_port, mail_type, state_reason;
@@ -1606,6 +1608,7 @@ static int _load_job_state(Buf buffer, uint16_t protocol_version)
 		safe_unpackstr_xmalloc(&workflow_prior_dependency, &name_len, buffer);
 		safe_unpackstr_xmalloc(&workflow_post_dependency, &name_len, buffer);
 		safe_unpack16(&workflow_end, buffer);
+		safe_unpack8(&workflow_same_nodes, buffer);
 		safe_unpackstr_xmalloc(&filesystem_device, &name_len, buffer);
 		safe_unpackstr_xmalloc(&filesystem_type, &name_len, buffer);
 		safe_unpackstr_xmalloc(&filesystem_mountpoint, &name_len, buffer);
@@ -2404,6 +2407,7 @@ static int _load_job_state(Buf buffer, uint16_t protocol_version)
 	xfree(job_ptr->workflow_post_dependency);
 	job_ptr->workflow_post_dependency = workflow_post_dependency;
 	job_ptr->workflow_end = workflow_end;
+	job_ptr->workflow_same_nodes = workflow_same_nodes;
 	xfree(job_ptr->filesystem_device);
 	job_ptr->filesystem_device = filesystem_device;
 	xfree(job_ptr->filesystem_type);
@@ -2653,6 +2657,7 @@ void _dump_job_details(struct job_details *detail_ptr, Buf buffer)
 	packstr(detail_ptr->workflow_prior_dependency, buffer);
 	packstr(detail_ptr->workflow_post_dependency,  buffer);
 	pack16(detail_ptr->workflow_end,               buffer);
+	pack8(detail_ptr->workflow_same_nodes,         buffer);
 	packstr(detail_ptr->filesystem_device, 		   buffer);
 	packstr(detail_ptr->filesystem_type,  		   buffer);
 	packstr(detail_ptr->filesystem_mountpoint,     buffer);
@@ -2709,6 +2714,7 @@ static int _load_job_details(struct job_record *job_ptr, Buf buffer,
 	uint16_t cpu_bind_type, mem_bind_type, plane_size;
 	uint32_t workflow_id = NO_VAL;
 	uint16_t workflow_start, workflow_end;
+	uint8_t  workflow_same_nodes;
 	uint16_t nvram_mode = NO_VAL16;
 	uint32_t nvram_size = NO_VAL;
 	uint8_t open_mode, overcommit, prolog_running;
@@ -2763,6 +2769,7 @@ static int _load_job_details(struct job_record *job_ptr, Buf buffer,
 		safe_unpackstr_xmalloc(&workflow_prior_dependency,  &name_len, buffer);
 		safe_unpackstr_xmalloc(&workflow_post_dependency,  &name_len, buffer);
 		safe_unpack16(&workflow_end, buffer);
+		safe_unpack8(&workflow_same_nodes, buffer);
 		safe_unpackstr_xmalloc(&filesystem_device, 		&name_len, buffer);
 		safe_unpackstr_xmalloc(&filesystem_type,  		&name_len, buffer);
 		safe_unpackstr_xmalloc(&filesystem_mountpoint,  &name_len, buffer);
@@ -3016,6 +3023,7 @@ static int _load_job_details(struct job_record *job_ptr, Buf buffer,
 	job_ptr->details->workflow_prior_dependency = workflow_prior_dependency;
 	job_ptr->details->workflow_post_dependency = workflow_post_dependency;
 	job_ptr->details->workflow_end = workflow_end;
+	job_ptr->details->workflow_same_nodes = workflow_same_nodes;
 	job_ptr->details->filesystem_type 		= filesystem_type;
 	job_ptr->details->filesystem_mountpoint = filesystem_mountpoint;
 	job_ptr->details->filesystem_device     = filesystem_device;
@@ -4502,8 +4510,8 @@ void dump_job_desc(job_desc_msg_t * job_specs)
 		debug3("   TRES_per_task=%s", job_specs->tres_per_task);
 
 	// NEXTGenIO
-	debug3("   workflow_start=%u, workflow_prior_dependency=%s, workflow_post_dependency=%s, workflow_end=%u, workflow_id=%u",
-			job_specs->workflow_start, job_specs->workflow_prior_dependency,
+	debug3("   workflow_start=%u, workflow_same_nodes:%u, workflow_prior_dependency=%s, workflow_post_dependency=%s, workflow_end=%u, workflow_id=%u",
+			job_specs->workflow_start, job_specs->workflow_same_nodes, job_specs->workflow_prior_dependency,
 			job_specs->workflow_post_dependency, job_specs->workflow_end, job_specs->workflow_id);
 	debug3("   Filesystem type:%s, Device:%s, Mountpoint:%s, size:%s",
 			job_specs->filesystem_type, job_specs->filesystem_device,
@@ -4744,6 +4752,7 @@ extern struct job_record *job_array_split(struct job_record *job_ptr)
 	job_ptr_pend->workflow_prior_dependency = xstrdup(job_ptr->workflow_prior_dependency);
 	job_ptr_pend->workflow_post_dependency = xstrdup(job_ptr->workflow_post_dependency);
 	job_ptr_pend->workflow_end = job_ptr->workflow_end;
+	job_ptr_pend->workflow_same_nodes = job_ptr->workflow_same_nodes;
 	job_ptr_pend->filesystem_device = xstrdup(job_ptr->filesystem_device);
 	job_ptr_pend->filesystem_type = xstrdup(job_ptr->filesystem_type);
 	job_ptr_pend->filesystem_mountpoint = xstrdup(job_ptr->filesystem_mountpoint);
@@ -7672,6 +7681,17 @@ extern int validate_job_create_req(job_desc_msg_t * job_desc, uid_t submit_uid,
 	if (job_desc->x11 && !(slurmctld_conf.prolog_flags & PROLOG_FLAG_X11))
 		return ESLURM_X11_NOT_AVAIL;
 
+	if (job_desc->nvram_mode == NO_VAL16) {
+		if (xstrstr(slurmctld_conf.node_features_plugins, "nvram_")) {
+			error("NVRAM options must be used with NVRAM clusters.");
+			return ESLURM_NVRAM_OPTIONS_REQUIRED;
+		}
+	}
+	if (!xstrstr(slurmctld_conf.node_features_plugins, "nvram_") && (job_desc->nvram_mode != NO_VAL16) ) {
+		error("NVRAM options must not be used with non NVRAM clusters.");
+		return ESLURM_NVRAM_OPTIONS_NOT_REQUIRED;
+	}
+
 	/* Make sure anything that may be put in the database will be
 	 * lower case */
 	xstrtolower(job_desc->account);
@@ -8305,6 +8325,7 @@ _copy_job_desc_to_job_record(job_desc_msg_t * job_desc,
 	job_ptr->workflow_prior_dependency = xstrdup(job_desc->workflow_prior_dependency);
 	job_ptr->workflow_post_dependency  = xstrdup(job_desc->workflow_post_dependency);
 	job_ptr->workflow_end              = job_desc->workflow_end;
+	job_ptr->workflow_same_nodes       = job_desc->workflow_same_nodes;
 	if ( job_ptr->workflow_start != 0 )
 		job_ptr->workflow_id = job_ptr->job_id;
 	job_ptr->filesystem_device         = xstrdup(job_desc->filesystem_device);
@@ -10251,6 +10272,7 @@ void pack_job(struct job_record *dump_job_ptr, uint16_t show_flags, Buf buffer,
 		packstr(dump_job_ptr->workflow_prior_dependency, buffer);
 		packstr(dump_job_ptr->workflow_post_dependency, buffer);
 		pack16(dump_job_ptr->workflow_end, buffer);
+		pack8(dump_job_ptr->workflow_same_nodes, buffer);
 		packstr(dump_job_ptr->filesystem_device, buffer);
 		packstr(dump_job_ptr->filesystem_type, buffer);
 		packstr(dump_job_ptr->filesystem_mountpoint, buffer);
@@ -17653,6 +17675,7 @@ extern job_desc_msg_t *copy_job_record_to_job_desc(struct job_record *job_ptr)
 	job_desc->workflow_prior_dependency = xstrdup(job_ptr->workflow_prior_dependency);
 	job_desc->workflow_post_dependency  = xstrdup(job_ptr->workflow_post_dependency);
 	job_desc->workflow_end              = job_ptr->workflow_end;
+	job_desc->workflow_same_nodes       = job_ptr->workflow_same_nodes;
 	job_desc->filesystem_device         = xstrdup(details->filesystem_device);
 	job_desc->filesystem_type           = xstrdup(details->filesystem_type);
 	job_desc->filesystem_mountpoint     = xstrdup(details->filesystem_mountpoint);
@@ -18591,8 +18614,9 @@ extern int _workflows_set_dependencies(struct job_record *job_ptr)
 
 		struct job_record *job_ptr2 = find_job_record(job_id);
 		if (job_ptr2) {
-			debug2("%s: PRIOR_DEPENDENCY sched: JobId=%u, State=%s, Workflow_id=%u, Start=%u, End=%u, PriorDependency=%s, PostDependency=%s",
-					__func__, job_ptr2->job_id, job_state_string(job_ptr2->job_state), job_ptr2->workflow_id, job_ptr2->workflow_start, job_ptr2->workflow_end,
+			debug2("%s: PRIOR_DEPENDENCY sched: JobId=%u, State=%s, Workflow_id=%u, SN:%u, Start=%u, End=%u, PriorDependency=%s, PostDependency=%s",
+					__func__, job_ptr2->job_id, job_state_string(job_ptr2->job_state), job_ptr2->workflow_id,
+					job_ptr2->workflow_same_nodes, job_ptr2->workflow_start, job_ptr2->workflow_end,
 					job_ptr2->workflow_prior_dependency, job_ptr2->workflow_post_dependency);
 
 			if ( IS_JOB_FINISHED(job_ptr2) ) {
@@ -18765,8 +18789,9 @@ extern int _workflows_job_complete(struct job_record *job_ptr)
 		job_id = (uint32_t) long_id;
 		struct job_record *job_ptr2 = find_job_record(job_id);
 		if (job_ptr2) {
-			debug2("%s: POST_DEPENDENCY sched: JobId=%u, State=%s, Workflow_id=%u, Start=%u, End=%u, PriorDependency=%s, PostDependency=%s",
-					__func__, job_ptr2->job_id, job_state_string(job_ptr2->job_state), job_ptr2->workflow_id, job_ptr2->workflow_start, job_ptr2->workflow_end,
+			debug2("%s: POST_DEPENDENCY sched: JobId=%u, State=%s, Workflow_id=%u, SN=%u, Start=%u, End=%u, PriorDependency=%s, PostDependency=%s",
+					__func__, job_ptr2->job_id, job_state_string(job_ptr2->job_state), job_ptr2->workflow_id,
+					job_ptr2->workflow_same_nodes,job_ptr2->workflow_start, job_ptr2->workflow_end,
 					job_ptr2->workflow_prior_dependency, job_ptr2->workflow_post_dependency);
 
 

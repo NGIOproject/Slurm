@@ -1598,6 +1598,7 @@ typedef struct job_descriptor {	/* For submit, allocate, and update requests */
 	char *workflow_prior_dependency;	/* Depends on JOB IDs */  	// NEXTGenIO
 	char *workflow_post_dependency;		/* Dependent JOB IDs */ 	// NEXTGenIO
 	uint16_t workflow_end;		/* Is this the end of a workflow? */ 	// NEXTGenIO
+	uint8_t workflow_same_nodes;		/* Try to run on the same nodes? */		// NEXTGenIO
 	uint16_t nvram_mode;	/* NVRAM mode */				// NEXTGenIO		
 	uint32_t nvram_size;	/* NVRAM size */				// NEXTGenIO
 	uint8_t optimise_for_energy; /* optimise for energy */	// NEXTGenIO
@@ -1757,6 +1758,7 @@ typedef struct job_info {
 	char *workflow_prior_dependency;	/* Depends on JOB IDs */ 		// NEXTGenIO
 	char *workflow_post_dependency;		/* Dependent JOB IDs */			// NEXTGenIO
 	uint16_t workflow_end;		/* Is this the end of a workflow? */	// NEXTGenIO
+	uint8_t workflow_same_nodes;/* Try to run on the same nodes? */		// NEXTGenIO
 	uint16_t nvram_mode;	/* NVRAM mode */				// NEXTGenIO		
 	uint32_t nvram_size;	/* NVRAM size */				// NEXTGenIO
 	uint8_t optimise_for_energy; /* optimise for energy */	// NEXTGenIO
@@ -2231,6 +2233,9 @@ typedef struct node_info {
 	uint32_t nvram_memory_capacity; 	/* Memory NVRAM in GBs */ 		// NEXTGenIO
 	uint32_t nvram_appdirect_capacity; 	/* AppDirect NVRAM in GBs */ 	// NEXTGenIO
 	uint16_t nvram_number_of_namespaces;		/* Namespaces */		// NEXTGenIO
+	uint32_t free_mem_nvram;	/* Free NVRAM memory in GiB */			// NEXTGenIO
+	uint32_t free_space_nvram_0;/* Free NVRAM space in GiB */			// NEXTGenIO
+	uint32_t free_space_nvram_1;/* Free NVRAM space in GiB */			// NEXTGenIO
 } node_info_t;
 
 typedef struct node_info_msg {
@@ -2437,6 +2442,8 @@ typedef struct resource_allocation_response_msg {
 	void *working_cluster_rec; /* Cluster to direct remaining messages to.
 				    * slurmdb_cluster_rec_t* because slurm.h
 				    * doesn't know about slurmdb.h. */
+	uint16_t nvram_mode;	/* NVRAM mode */				// NEXTGenIO		
+	uint32_t nvram_size;	/* NVRAM size */				// NEXTGenIO
 } resource_allocation_response_msg_t;
 
 typedef struct partition_info_msg {

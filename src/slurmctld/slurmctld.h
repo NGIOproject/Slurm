@@ -587,6 +587,7 @@ struct job_details {
 	char *workflow_prior_dependency;	/* Depends on JOB IDs */				// NEXTGenIO
 	char *workflow_post_dependency;		/* Dependent JOB IDs */					// NEXTGenIO
 	uint16_t workflow_end;			/* Is this the end of a workflow? */		// NEXTGenIO
+	uint8_t workflow_same_nodes;	/* Try to run on the same nodes? */			// NEXTGenIO
 	char *filesystem_device;			/* filesystem device */	// NEXTGenIO
 	char *filesystem_type;			/* filesystem type */		// NEXTGenIO
 	char *filesystem_mountpoint;	/* filesystem mountpoint */	// NEXTGenIO
@@ -885,6 +886,7 @@ struct job_record {
 	char *workflow_prior_dependency;	/* Depends on JOB IDs */		// NEXTGenIO
 	char *workflow_post_dependency;		/* Dependent JOB IDs */			// NEXTGenIO
 	uint16_t workflow_end;		/* Is this the end of a workflow? */	// NEXTGenIO
+	uint8_t workflow_same_nodes;/* Try to run on the same nodes? */		// NEXTGenIO
 	char *filesystem_device;		/* filesystem device */		// NEXTGenIO
 	char *filesystem_type;			/* filesystem type */		// NEXTGenIO
 	char *filesystem_mountpoint;	/* filesystem mountpoint */	// NEXTGenIO
@@ -2259,6 +2261,15 @@ extern void reset_node_load(char *node_name, uint32_t cpu_load);
 
 /* Reset a node's free memory value */
 extern void reset_node_free_mem(char *node_name, uint64_t free_mem);
+
+// NEXTGenIO
+/* Reset a node's free NVRAM memory value */
+extern void reset_node_free_mem_nvram(char *node_name, uint32_t free_mem_nvram);
+
+// NEXTGenIO
+/* Reset a node's free NVRAM space value */
+extern void reset_node_free_mem_space(char *node_name,
+		uint32_t free_space_nvram_0, uint32_t free_space_nvram_1);
 
 /* Reset all scheduling statistics
  * level IN - clear backfilled_jobs count if set */

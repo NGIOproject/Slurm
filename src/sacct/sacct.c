@@ -153,6 +153,7 @@ print_field_t fields[] = {
 	{20, "WorkflowsPost", print_fields_str, PRINT_WORKFLOWSPOST},
 	{10, "WorkflowsStart", print_fields_uint, PRINT_WORKFLOWSSTART},
 	{10, "WorkflowsEnd", print_fields_uint, PRINT_WORKFLOWSEND},
+	{17, "WorkflowsDuration", print_fields_time_from_secs, PRINT_WORKFLOWDURATION},
 	{0,  NULL, NULL, 0}};
 
 List jobs = NULL;

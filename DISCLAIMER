@@ -1,6 +1,7 @@
 Slurm was produced at Lawrence Livermore National Laboratory in collaboration
 with various organizations.
 
+Copyright (C) 2015-2019 NEXTGenIO Project [EC H2020 Project ID: 671951] (www.nextgenio.eu)
 Copyright (C) 2012-2013 Los Alamos National Security, LLC.
 Copyright (C) 2011 Trinity Centre for High Performance Computing
 Copyright (C) 2010-2015 SchedMD LLC
@@ -82,6 +83,7 @@ Bryan O'Sullivan (Pathscale)
 Gennaro Oliva (Institute of High Performance Computing and Networking, Italy)
 Alejandro Lucero Palau (Barcelona Supercomputer Center, Spain)
 Daniel Palermo (HP)
+Iakovos Panourgias (EPCC, University of Edinburgh)
 Dan Phung (LLNL/Columbia University)
 Ashley Pittman (Quadrics, UK)
 Vijay Ramasubramanian (University of Maryland)

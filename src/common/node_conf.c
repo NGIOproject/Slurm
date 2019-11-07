@@ -683,6 +683,9 @@ extern struct node_record *create_node_record (
 	node_ptr->nvram_memory_capacity = NO_VAL;		// NEXTGenIO
 	node_ptr->nvram_appdirect_capacity = NO_VAL;	// NEXTGenIO
 	node_ptr->nvram_number_of_namespaces = NO_VAL16;// NEXTGenIO
+	node_ptr->free_mem_nvram = NO_VAL;				// NEXTGenIO
+	node_ptr->free_space_nvram_0 = NO_VAL;			// NEXTGenIO
+	node_ptr->free_space_nvram_1 = NO_VAL;			// NEXTGenIO
 	xassert (node_ptr->magic = NODE_MAGIC)  /* set value */;
 	return node_ptr;
 }

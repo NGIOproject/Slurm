@@ -185,6 +185,11 @@ struct node_record {
 	uint32_t nvram_memory_capacity; 	/* Memory NVRAM in GBs */ 		// NEXTGenIO
 	uint32_t nvram_appdirect_capacity; 	/* AppDirect NVRAM in GBs */ 	// NEXTGenIO
 	uint16_t nvram_number_of_namespaces;/* Namespaces */				// NEXTGenIO
+	uint32_t free_mem_nvram;	/* Free NVRAM memory in GiB */			// NEXTGenIO
+	time_t free_mem_nvram_time;	/* Time when free_mem_nvram last set */	// NEXTGenIO
+	uint32_t free_space_nvram_0;/* Free NVRAM space in GiB */			// NEXTGenIO
+	uint32_t free_space_nvram_1;/* Free NVRAM space in GiB */			// NEXTGenIO
+	time_t free_space_nvram_time;/* Time when free_space_nvram last set */	// NEXTGenIO
 };
 extern struct node_record *node_record_table_ptr;  /* ptr to node records */
 extern int node_record_count;		/* count in node_record_table_ptr */

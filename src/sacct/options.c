@@ -371,7 +371,7 @@ sacct [<OPTION>]                                                            \n \
                              avediskread,maxdiskwrite,maxdiskwritenode,     \n\
                              maxdiskwritetask,avediskread,allocgres,reqgres,\n\
                              workflowsid,workflowsprior,workflowspost,      \n\
-                             workflowsstart,workflowsend                    \n\
+                             workflowsstart,workflowsend,workflowsduration  \n\
      -L, --allclusters:                                                     \n\
 	           Display jobs ran on all clusters. By default, only jobs  \n\
                    ran on the cluster from where sacct is called are        \n\
@@ -425,7 +425,7 @@ sacct [<OPTION>]                                                            \n \
 	           Primarily for debugging purposes, report the state of    \n\
                    various variables during processing.                     \n\
      -V, --version: Print version.                                          \n\
-     -w          : Use this to provide a WorkflowID to select jobs          \n\
+     -w, --workflows  Use this to provide a WorkflowID to select jobs       \n\
      -W, --wckeys:                                                          \n\
                    Only send data about these wckeys.  Default is all.      \n\
      --whole-hetjob=[yes|no]:                                               \n\
@@ -1290,6 +1290,8 @@ extern void parse_command_line(int argc, char **argv)
 			dot = DEFAULT_COMP_FIELDS;
 		else if ( ( env_val = getenv("SACCT_FORMAT") ) )
 			dot = xstrdup(env_val);
+		else if (job_cond->workflow_list && list_count(job_cond->workflow_list)) // NEXTGenIO
+			dot = DEFAULT_FIELDS_WORFKLOWS;
 		else
 			dot = DEFAULT_FIELDS;
 

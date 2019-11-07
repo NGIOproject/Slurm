@@ -308,6 +308,7 @@ typedef struct slurm_options {
 	char *workflow_prior_dependency;	/* Depends on JOB IDs */			// NEXTGenIO
 	char *workflow_post_dependency;		/* Dependent JOB IDs */				// NEXTGenIO
 	uint16_t workflow_end;			/* Is this the end of a workflow? */	// NEXTGenIO
+	uint16_t workflow_same_nodes;	/* Try to run on the same nodes? */		// NEXTGenIO
 	char *filesystem_device;		/* Device of filesystem to create */	// NEXTGenIO
 	char *filesystem_type;			/* Type of filesystem to create */		// NEXTGenIO
 	char *filesystem_mountpoint;	/* Mountpoint of filesystem */			// NEXTGenIO

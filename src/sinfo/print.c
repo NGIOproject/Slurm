@@ -803,13 +803,14 @@ if (sinfo_data) {
 	if (sinfo_data->nvram_capacity == NO_VAL)
 		_print_str("n/a", width, right_justify, true);
 	else {
-		snprintf(id, FORMAT_STRING_SIZE, "%u/%u/%u",
-				sinfo_data->nvram_capacity, sinfo_data->nvram_memory_capacity,
-				sinfo_data->nvram_appdirect_capacity);
+		snprintf(id, FORMAT_STRING_SIZE, "%u/%u(%u)/%u(%u/%u)",
+				sinfo_data->nvram_capacity,
+				sinfo_data->nvram_memory_capacity, sinfo_data->free_mem_nvram,
+				sinfo_data->nvram_appdirect_capacity, sinfo_data->free_space_nvram_0, sinfo_data->free_space_nvram_1);
 		_print_str(id, width, right_justify, true);
 	}
 } else
-	_print_str("NVRAM(C/M/A)", width, right_justify, true);
+	_print_str("NVRAM(C / M(f) / A(f0/f1))", width, right_justify, true);
 
 if (suffix)
 	printf("%s", suffix);

@@ -132,6 +132,8 @@ static int	_valid_batch_features(struct job_record *job_ptr,
 static int	_valid_feature_list(struct job_record *job_ptr,
 				    bool can_reboot);
 static int	_valid_node_feature(char *feature, bool can_reboot);
+static void _update_constraints_due_to_dependencies(struct job_record *job_ptr,
+						struct job_record *prior_dependency_job_ptr);
 #ifndef HAVE_FRONT_END
 static void *	_wait_boot(void *arg);
 #endif
@@ -1210,6 +1212,8 @@ static int _schedule(uint32_t job_limit)
 	static int metascheduler_2LM_pending_jobs_ratio = 0; // How many times more 1LM jobs are required to deprioritise 2LM jobs
 	static float metascheduler_1LM_priority_multiplier = 0; // depriority multiplier for 1LM jobs
 	static float metascheduler_2LM_priority_multiplier = 0; // depriority multiplier for 2LM jobs
+	static bool metascheduler_optimise_reboots = false; // Hold off rebooting feature nodes
+	static bool metascheduler_optimise_for_energy = false; // Force optimise for energy
 	static int deprioritse_jobs = 0;
 	static uint32_t bf_min_prio_reserve = 0;
 	static int def_job_limit = 100;
@@ -1337,6 +1341,21 @@ static int _schedule(uint32_t job_limit)
 			if (task_cnt > 0.0)
 				metascheduler_2LM_priority_multiplier = task_cnt;
 		}
+
+		metascheduler_optimise_reboots = false; // Hold off rebooting features nodes
+		if (sched_params &&
+			(strstr(sched_params, "metascheduler_optimise_reboots"))) {
+			/*                     123456789012345678901234567890  */
+			metascheduler_optimise_reboots = true;
+		}
+
+		metascheduler_optimise_for_energy = false;
+		if (sched_params &&
+			(strstr(sched_params, "metascheduler_optimise_for_energy"))) {
+			/*                     123456789012345678901234567890123  */
+			metascheduler_optimise_for_energy = true;
+		}
+
 
 		bb_array_stage_cnt = 10;
 		if (sched_params &&
@@ -1645,10 +1664,12 @@ static int _schedule(uint32_t job_limit)
 	}
 
 	/* NEXTGenIO */
-	int nodes_in_1LM = 0, pending_1LM_jobs = 0, pending_1LM_nodes = 0;
-	int nodes_in_2LM = 0, pending_2LM_jobs = 0, pending_2LM_nodes = 0;
+	int nodes_in_1LM = 0, pending_1LM_jobs = 0, pending_1LM_nodes = 0, running_1LM_jobs = 0, running_1LM_nodes = 0;
+	int nodes_in_2LM = 0, pending_2LM_jobs = 0, pending_2LM_nodes = 0, running_2LM_jobs = 0, running_2LM_nodes = 0;
+	int nodes_in_1LM_count = 0, nodes_in_2LM_count = 0;
 	deprioritse_jobs = 0;
-	if (xstrcmp(slurmctld_conf.metascheduler, "optimise-for-energy") == 0) {
+	if ( (xstrcmp(slurmctld_conf.metascheduler, "optimise-for-energy") == 0) ||
+		 (metascheduler_optimise_reboots == true) ) {
 		bitstr_t *tmp_bitmap;
 
 		tmp_bitmap = build_active_feature_bitmap2("1LM");
@@ -1665,40 +1686,60 @@ static int _schedule(uint32_t job_limit)
 		// Have a forward look into the Job Queue.
 		ListIterator itr2 = list_iterator_create(job_list);
 		struct job_record *job_ptr2 = NULL;
+
 		while ((job_ptr2 = list_next(itr2))) {
-			if (job_ptr2->job_state != 0) // If not pending continue
+			if (job_depth++ > job_limit) break;
+			if ( (job_ptr2->job_state != 0) || // If not PENDING
+				 (job_ptr2->job_state != 1) )  // or RUNNING continue
 				continue;
 
 			if (job_ptr2->nvram_mode == 1) {
-				pending_1LM_jobs++;
-				pending_1LM_nodes += job_ptr2->details->min_nodes;
+				if (job_ptr2->job_state == 0) {
+					pending_1LM_jobs++;
+					pending_1LM_nodes += job_ptr2->details->min_nodes;
+				} else {
+					running_1LM_jobs++;
+					running_1LM_nodes += job_ptr2->details->min_nodes;
+				}
 			}
 			if (job_ptr2->nvram_mode == 2) {
-				pending_2LM_jobs++;
-				pending_2LM_nodes += job_ptr2->details->min_nodes;
+				if (job_ptr2->job_state == 0) {
+					pending_2LM_jobs++;
+					pending_2LM_nodes += job_ptr2->details->min_nodes;
+				} else {
+					running_2LM_jobs++;
+					running_2LM_nodes += job_ptr2->details->min_nodes;
+				}
 			}
 		}
 		list_iterator_destroy(itr2);
+		nodes_in_1LM_count = nodes_in_1LM;
+		nodes_in_2LM_count = nodes_in_2LM;
 
-		sched_debug3("%s: MetaScheduler: nodes in 1LM:%d, 2LM:%d, Jobs in Queue:%d, pending 1LM jobs:%d asking for 1LM nodes:%d; pending 2LM jobs:%d asking for 2LM nodes:%d.",
-					__func__, nodes_in_1LM, nodes_in_2LM, slurmctld_diag_stats.schedule_queue_len,
-					pending_1LM_jobs, pending_1LM_nodes, pending_2LM_jobs, pending_2LM_nodes);
+		sched_debug3("%s: MetaScheduler: scanned %d jobs; nodes in 1LM:%d, 2LM:%d, Jobs in Queue:%d, running 1LM jobs:%d on 1LM nodes:%d, pending 1LM jobs:%d asking for 1LM nodes:%d; running 2LM jobs:%d on 2LM nodes:%d, pending 2LM jobs:%d asking for 2LM nodes:%d.",
+					__func__, job_depth, nodes_in_1LM, nodes_in_2LM, slurmctld_diag_stats.schedule_queue_len,
+					running_1LM_jobs, running_1LM_nodes, pending_1LM_jobs, pending_1LM_nodes,
+					running_2LM_jobs, running_2LM_nodes, pending_2LM_jobs, pending_2LM_nodes);
+		job_depth = 0;
 
-		if ( pending_1LM_jobs > (pending_2LM_jobs * metascheduler_2LM_pending_jobs_ratio)
-				&& ( pending_1LM_jobs > metascheduler_1LM_pending_jobs)
-				&& ( pending_2LM_nodes > nodes_in_2LM)) {
-			deprioritse_jobs = 2;
-		} else if ( pending_2LM_jobs > (pending_1LM_jobs * metascheduler_1LM_pending_jobs_ratio)
-				&& ( pending_2LM_jobs > metascheduler_2LM_pending_jobs)
-				&& ( pending_1LM_nodes > nodes_in_1LM)) {
-			deprioritse_jobs = 1;
-		} else
-			deprioritse_jobs = 0;
+		// Deprioritise jobs when "optimise-for-energy" is set
+		if (xstrcmp(slurmctld_conf.metascheduler, "optimise-for-energy") == 0) {
+			if ( pending_1LM_jobs > (pending_2LM_jobs * metascheduler_2LM_pending_jobs_ratio)
+					&& ( pending_1LM_jobs > metascheduler_1LM_pending_jobs)
+					&& ( pending_2LM_nodes > nodes_in_2LM)) {
+				deprioritse_jobs = 2;
+			} else if ( pending_2LM_jobs > (pending_1LM_jobs * metascheduler_1LM_pending_jobs_ratio)
+					&& ( pending_2LM_jobs > metascheduler_2LM_pending_jobs)
+					&& ( pending_1LM_nodes > nodes_in_1LM)) {
+				deprioritse_jobs = 1;
+			} else
+				deprioritse_jobs = 0;
 
-		if ( deprioritse_jobs != 0 )
-			sched_debug3("%s: MetaScheduler: de-prioritise %dLM jobs.", __func__, deprioritse_jobs);
-		else
-			sched_debug3("%s: MetaScheduler: inactive.", __func__);
+			if ( deprioritse_jobs != 0 )
+				sched_debug3("%s: MetaScheduler: de-prioritise %dLM jobs.", __func__, deprioritse_jobs);
+			else
+				sched_debug3("%s: MetaScheduler: inactive.", __func__);
+		}
 	}
 
 	while (1) {
@@ -1858,6 +1899,12 @@ next_task:
 		slurmctld_diag_stats.schedule_cycle_depth++;
 
 		/* NEXTGenIO */
+		if (metascheduler_optimise_for_energy) {
+			sched_debug2("%s: MetaScheduler: JobId=%u will be optimised for energy",
+						__func__, job_ptr->job_id);
+			job_ptr->optimise_for_energy = true;
+		}
+
 		if (job_ptr->nvram_mode != NO_VAL16) {
 			sched_debug3("%s: JobId=%u: is asking for NVRAM mode=%u, Size=%u, Priority=%d.",
 					__func__, job_ptr->job_id, job_ptr->nvram_mode, job_ptr->nvram_size, job_ptr->priority);
@@ -1925,6 +1972,8 @@ next_task:
 								job_ptr->priority, job_ptr->partition);
 						exit_loop = true;
 						exit_loop_and_continue = true;
+						if ( (IS_JOB_RUNNING(job_ptr2)) && (job_ptr->workflow_same_nodes == true) )
+							_update_constraints_due_to_dependencies(job_ptr, job_ptr2);
 					}
 				}
 				tok = strtok_r(NULL, ",", &save_ptr);
@@ -1934,8 +1983,9 @@ next_task:
 				continue;
 		}
 
-		if ( (xstrcmp(slurmctld_conf.metascheduler, "optimise-for-energy") == 0) && (job_ptr->nvram_mode != NO_VAL16)
-			&& (deprioritse_jobs != 0) ) {
+		if ( (xstrcmp(slurmctld_conf.metascheduler, "optimise-for-energy") == 0) &&
+			 (job_ptr->nvram_mode != NO_VAL16) &&
+			 (deprioritse_jobs != 0) ) {
 			int old_job_priority = 0;
 			bool exit_loop_and_continue = false;
 
@@ -1967,6 +2017,15 @@ next_task:
 						__func__, job_ptr->job_id, job_ptr->priority, old_job_priority, job_ptr->bumped);
 				continue;
 			}
+		}
+
+		// Add logic to HOLD job if a previous same NVRAM mode job is ending AND
+		//                       if nodes need to be rebooted
+		if ( (metascheduler_optimise_reboots == true) &&
+			 (job_ptr->nvram_mode != NO_VAL16) ) {
+
+			nodes_in_1LM_count++;
+			nodes_in_2LM_count++;
 		}
 
 		if (job_ptr->resv_name) {
@@ -5385,4 +5444,81 @@ waitpid_timeout(const char *name, pid_t pid, int *pstatus, int timeout)
 
 	killpg(pid, SIGKILL);  /* kill children too */
 	return pid;
+}
+
+static void _update_constraints_due_to_dependencies(struct job_record *job_ptr,
+						struct job_record *prior_dependency_job_ptr) {
+
+	bitstr_t *node_bitmap = NULL;
+	int job_req_node_bitmap_size = 0, prior_dependency_node_bitmap_size = 0, i = 0;
+
+	// TODO :
+	// A) What happens if the user defined a nodelist?
+	//    No, problem. --workflow-same-nodes AND -w --nodelist IS NOT ALLOWED.
+	// B) Should we overwrite an existing nodelist?
+	//    Due to (A) the only way that a nodelist exists is because of this function.
+	//    Just add the new nodes to the nodelist (if applicable); to handle 4 -> 2 -> 6 -> 2 workflows.
+	// C) Should we append to an existing nodelist?
+	//    See (B)
+
+	if (node_name2bitmap(prior_dependency_job_ptr->nodes, false, &node_bitmap)) {
+		debug2("sched: %s: Invalid node list for job_update: %s (%d) for job_id %u",
+				__func__, prior_dependency_job_ptr->nodes, prior_dependency_job_ptr->job_id, job_ptr->job_id);
+		FREE_NULL_BITMAP(node_bitmap);
+		return;
+	}
+	prior_dependency_node_bitmap_size = bit_set_count(node_bitmap);
+
+	if (job_ptr->details->req_node_bitmap)
+		job_req_node_bitmap_size = bit_set_count(job_ptr->details->req_node_bitmap);
+
+	debug3("sched: %s: new [%d]: nodes:%d max_nodes:%d, dependency [%d]: nodes:%d, max_nodes:%d",
+			__func__, job_ptr->job_id, job_req_node_bitmap_size, job_ptr->details->max_nodes,
+			prior_dependency_job_ptr->job_id, prior_dependency_node_bitmap_size, prior_dependency_job_ptr->details->max_nodes);
+
+	if ( job_ptr->details->max_nodes == prior_dependency_job_ptr->details->max_nodes )
+	{   // The new job asked for the same number of nodes. Re-use them.
+		xfree(job_ptr->details->req_nodes);
+		job_ptr->details->req_nodes = xstrdup(prior_dependency_job_ptr->nodes);
+		FREE_NULL_BITMAP(job_ptr->details->req_node_bitmap);
+		job_ptr->details->req_node_bitmap = node_bitmap;
+	}
+	else if ( job_ptr->details->max_nodes > prior_dependency_job_ptr->details->max_nodes )
+	{   // The new job asked for more nodes. Nothing that we can do; just request the existing ones
+		// and the Scheduler will add more (as required).
+		xfree(job_ptr->details->req_nodes);
+		job_ptr->details->req_nodes = xstrdup(prior_dependency_job_ptr->nodes);
+		FREE_NULL_BITMAP(job_ptr->details->req_node_bitmap);
+		job_ptr->details->req_node_bitmap = node_bitmap;
+	}
+	else if ( job_ptr->details->max_nodes < prior_dependency_job_ptr->details->max_nodes )
+	{   // We have to use the first n nodes out of N nodes of the running job.
+		xfree(job_ptr->details->req_nodes);
+		//job_ptr->details->req_nodes = xstrdup(djob_ptr->nodes);
+		FREE_NULL_BITMAP(job_ptr->details->req_node_bitmap);
+		//job_ptr->details->req_node_bitmap = node_bitmap;
+		xfree(job_ptr->details->exc_nodes);
+		FREE_NULL_BITMAP(job_ptr->details->exc_node_bitmap);
+
+		for (i = 0 ; i < bit_size(node_bitmap) ; ++i )
+		{
+			if ( bit_test(node_bitmap,i) )
+				bit_clear(node_bitmap, i);
+			else
+				bit_set(node_bitmap, i);
+		}
+		char *exc_nodes = NULL;
+		job_ptr->details->exc_node_bitmap = node_bitmap;
+		xfree(job_ptr->details->exc_nodes);
+		exc_nodes = bitmap2node_name(job_ptr->details->exc_node_bitmap);
+		job_ptr->details->exc_nodes = xstrdup(exc_nodes);
+		xfree(exc_nodes);
+	}
+	else
+		error("sched: %s: Unhandled case.", __func__);
+
+	debug2("sched: %s: setting req_nodes to %s for job_id %u",
+			__func__, job_ptr->details->req_nodes, job_ptr->job_id);
+
+	return;
 }

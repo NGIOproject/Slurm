@@ -249,6 +249,9 @@ _dump_node_state (struct node_record *dump_node_ptr, Buf buffer)
 	pack32  (dump_node_ptr->nvram_memory_capacity, buffer);		// NEXTGenIO
 	pack32  (dump_node_ptr->nvram_appdirect_capacity, buffer);	// NEXTGenIO
 	pack16  (dump_node_ptr->nvram_number_of_namespaces, buffer);// NEXTGenIO
+	pack32  (dump_node_ptr->free_mem_nvram, buffer);			// NEXTGenIO
+	pack32  (dump_node_ptr->free_space_nvram_0, buffer);		// NEXTGenIO
+	pack32  (dump_node_ptr->free_space_nvram_1, buffer);		// NEXTGenIO
 	(void) gres_plugin_node_state_pack(dump_node_ptr->gres_list, buffer,
 					   dump_node_ptr->name);
 }
@@ -298,6 +301,7 @@ extern int load_all_node_state ( bool state_only )
 	uint32_t tmp_disk, name_len;
 	uint32_t reason_uid = NO_VAL;
 	uint16_t has_nvram = 0, number_of_namespaces = 0;		// NEXTGenIO
+	uint32_t free_mem_nvram = 0, free_space_nvram_0 = 0, free_space_nvram_1 = 0; // NEXTGenIO
 	uint32_t nvram_capacity = NO_VAL, nvram_memory_capacity = NO_VAL, nvram_appdirect_capacity = NO_VAL; // NEXTGenIO
 	time_t boot_req_time = 0, reason_time = 0;
 	List gres_list = NULL;
@@ -381,6 +385,9 @@ extern int load_all_node_state ( bool state_only )
 			safe_unpack32 (&nvram_memory_capacity,    buffer);	// NEXTGenIO
 			safe_unpack32 (&nvram_appdirect_capacity, buffer);	// NEXTGenIO
 			safe_unpack16 (&number_of_namespaces,     buffer);	// NEXTGenIO
+			safe_unpack32 (&free_mem_nvram, 		  buffer);	// NEXTGenIO
+			safe_unpack32 (&free_space_nvram_0, 	  buffer);	// NEXTGenIO
+			safe_unpack32 (&free_space_nvram_1, 	  buffer);	// NEXTGenIO
 			if (gres_plugin_node_state_unpack(
 				    &gres_list, buffer, node_name,
 				    protocol_version) != SLURM_SUCCESS)
@@ -522,6 +529,9 @@ extern int load_all_node_state ( bool state_only )
 					node_ptr->nvram_memory_capacity	    = nvram_memory_capacity;	// NEXTGenIO
 					node_ptr->nvram_appdirect_capacity	= nvram_appdirect_capacity;	// NEXTGenIO
 					node_ptr->nvram_number_of_namespaces= number_of_namespaces;		// NEXTGenIO
+					node_ptr->free_mem_nvram			= free_mem_nvram;			// NEXTGenIO
+					node_ptr->free_space_nvram_0		= free_space_nvram_0;		// NEXTGenIO
+					node_ptr->free_space_nvram_1		= free_space_nvram_1;		// NEXTGenIO
 				}
 				if (node_state & NODE_STATE_MAINT)
 					node_ptr->node_state |= NODE_STATE_MAINT;
@@ -571,6 +581,9 @@ extern int load_all_node_state ( bool state_only )
 				node_ptr->nvram_memory_capacity	    = nvram_memory_capacity;	// NEXTGenIO
 				node_ptr->nvram_appdirect_capacity	= nvram_appdirect_capacity;	// NEXTGenIO
 				node_ptr->nvram_number_of_namespaces= number_of_namespaces;		// NEXTGenIO
+				node_ptr->free_mem_nvram			= free_mem_nvram;			// NEXTGenIO
+				node_ptr->free_space_nvram_0		= free_space_nvram_0;		// NEXTGenIO
+				node_ptr->free_space_nvram_1		= free_space_nvram_1;		// NEXTGenIO
 			}
 
 			xfree(node_ptr->features_act);
@@ -638,6 +651,9 @@ extern int load_all_node_state ( bool state_only )
 			node_ptr->nvram_memory_capacity  	= nvram_memory_capacity;	// NEXTGenIO
 			node_ptr->nvram_appdirect_capacity	= nvram_appdirect_capacity;	// NEXTGenIO
 			node_ptr->nvram_number_of_namespaces= number_of_namespaces;		// NEXTGenIO
+			node_ptr->free_mem_nvram			= free_mem_nvram;			// NEXTGenIO
+			node_ptr->free_space_nvram_0		= free_space_nvram_0;		// NEXTGenIO
+			node_ptr->free_space_nvram_1		= free_space_nvram_1;		// NEXTGenIO
 			node_ptr->last_response = (time_t) 0;
 			xfree(node_ptr->mcs_label);
 			node_ptr->mcs_label	= mcs_label;
@@ -1115,6 +1131,9 @@ static void _pack_node (struct node_record *dump_node_ptr, Buf buffer,
 		pack32(dump_node_ptr->nvram_memory_capacity, buffer);		// NEXTGenIO
 		pack32(dump_node_ptr->nvram_appdirect_capacity, buffer);	// NEXTGenIO
 		pack16(dump_node_ptr->nvram_number_of_namespaces, buffer);	// NEXTGenIO
+		pack32(dump_node_ptr->free_mem_nvram, buffer);				// NEXTGenIO
+		pack32(dump_node_ptr->free_space_nvram_0, buffer);			// NEXTGenIO
+		pack32(dump_node_ptr->free_space_nvram_1, buffer);			// NEXTGenIO
 	} else if (protocol_version >= SLURM_MIN_PROTOCOL_VERSION) {
 		packstr (dump_node_ptr->name, buffer);
 		packstr (dump_node_ptr->node_hostname, buffer);
@@ -2695,9 +2714,14 @@ extern int validate_node_specs(slurm_node_registration_status_msg_t *reg_msg,
 	node_ptr->nvram_capacity = reg_msg->nvram_capacity;
 	node_ptr->nvram_memory_capacity = reg_msg->nvram_memory_capacity;
 	node_ptr->nvram_appdirect_capacity = reg_msg->nvram_appdirect_capacity;
-	debug3("%s: %s NVRAM Status=%1u (NVRAM Capacity: %d, Memory Capacity:%d, AppDirect Capacity:%d) (message:%1u).",
-			__func__, reg_msg->node_name, node_ptr->has_nvram, node_ptr->nvram_capacity, node_ptr->nvram_memory_capacity,
-			node_ptr->nvram_appdirect_capacity, reg_msg->has_nvram);
+	node_ptr->free_mem_nvram = reg_msg->free_mem_nvram;
+	node_ptr->free_space_nvram_0 = reg_msg->free_space_nvram_0;
+	node_ptr->free_space_nvram_1 = reg_msg->free_space_nvram_1;
+	debug3("%s: %s NVRAM Status=%1u (NVRAM Capacity: %d, Memory Capacity:%d (%d), AppDirect Capacity:%d (%d/%d)) (message:%1u).",
+			__func__, reg_msg->node_name, node_ptr->has_nvram, node_ptr->nvram_capacity,
+			node_ptr->nvram_memory_capacity, node_ptr->free_mem_nvram,
+			node_ptr->nvram_appdirect_capacity, node_ptr->free_space_nvram_0, node_ptr->free_space_nvram_1,
+			reg_msg->has_nvram);
 	node_ptr->nvram_number_of_namespaces = reg_msg->nvram_number_of_namespaces;
 	debug3("%s: %s Partitions=%1u", __func__, reg_msg->node_name, node_ptr->nvram_number_of_namespaces);
 
@@ -2709,6 +2733,22 @@ extern int validate_node_specs(slurm_node_registration_status_msg_t *reg_msg,
 	if (node_ptr->free_mem != reg_msg->free_mem) {
 		node_ptr->free_mem = reg_msg->free_mem;
 		node_ptr->free_mem_time = now;
+		last_node_update = now;
+	}
+	// NEXTGenIO
+	if (node_ptr->free_mem_nvram != reg_msg->free_mem_nvram) {
+		node_ptr->free_mem_nvram = reg_msg->free_mem_nvram;
+		node_ptr->free_mem_nvram_time = now;
+		last_node_update = now;
+	}
+	if (node_ptr->free_space_nvram_0 != reg_msg->free_space_nvram_0) {
+		node_ptr->free_space_nvram_0 = reg_msg->free_space_nvram_0;
+		node_ptr->free_space_nvram_time = now;
+		last_node_update = now;
+	}
+	if (node_ptr->free_space_nvram_1 != reg_msg->free_space_nvram_1) {
+		node_ptr->free_space_nvram_1 = reg_msg->free_space_nvram_1;
+		node_ptr->free_space_nvram_time = now;
 		last_node_update = now;
 	}
 
@@ -4122,6 +4162,47 @@ extern void reset_node_free_mem(char *node_name, uint64_t free_mem)
 #endif
 }
 
+// NEXTGenIO
+/* Reset a node's free NVRAM memory value */
+extern void reset_node_free_mem_nvram(char *node_name, uint32_t free_mem_nvram)
+{
+#ifdef HAVE_FRONT_END
+	return;
+#else
+	struct node_record *node_ptr;
+
+	node_ptr = find_node_record(node_name);
+	if (node_ptr) {
+		time_t now = time(NULL);
+		node_ptr->free_mem_nvram = free_mem_nvram;
+		node_ptr->free_mem_nvram_time = now;
+		last_node_update = now;
+	} else
+		error("%s: unable to find node %s", __func__, node_name);
+#endif
+}
+
+// NEXTGenIO
+/* Reset a node's free NVRAM space value */
+extern void reset_node_free_mem_space(char *node_name,
+		uint32_t free_space_nvram_0, uint32_t free_space_nvram_1)
+{
+#ifdef HAVE_FRONT_END
+	return;
+#else
+	struct node_record *node_ptr;
+
+	node_ptr = find_node_record(node_name);
+	if (node_ptr) {
+		time_t now = time(NULL);
+		node_ptr->free_space_nvram_0 = free_space_nvram_0;
+		node_ptr->free_space_nvram_1 = free_space_nvram_1;
+		node_ptr->free_space_nvram_time = now;
+		last_node_update = now;
+	} else
+		error("%s: unable to find node %s", __func__, node_name);
+#endif
+}
 
 /*
  * Check for nodes that haven't rebooted yet.

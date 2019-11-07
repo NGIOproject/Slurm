@@ -1234,6 +1234,9 @@ typedef struct suspend_int_msg {
 typedef struct ping_slurmd_resp_msg {
 	uint32_t cpu_load;	/* CPU load * 100 */
 	uint64_t free_mem;	/* Free memory in MiB */
+	uint32_t free_mem_nvram;		/* Free memory in GiB */
+	uint32_t free_space_nvram_0;	/* Free space (node 0) in GiB */
+	uint32_t free_space_nvram_1;	/* Free space (node 1) in GiB */
 } ping_slurmd_resp_msg_t;
 
 typedef struct license_info_request_msg {
@@ -1288,6 +1291,9 @@ typedef struct slurm_node_registration_status_msg {
 	uint32_t nvram_memory_capacity; 	/* Memory NVRAM in GBs */ 		// NEXTGenIO
 	uint32_t nvram_appdirect_capacity; 	/* AppDirect NVRAM in GBs */ 	// NEXTGenIO
 	uint16_t nvram_number_of_namespaces;/* Namespaces */				// NEXTGenIO
+	uint32_t free_mem_nvram;	/* Free NVRAM memory in GiB */			// NEXTGenIO
+	uint32_t free_space_nvram_0;/* Free NVRAM space in GiB */			// NEXTGenIO
+	uint32_t free_space_nvram_1;/* Free NVRAM space in GiB */			// NEXTGenIO
 } slurm_node_registration_status_msg_t;
 
 typedef struct slurm_node_reg_resp_msg {

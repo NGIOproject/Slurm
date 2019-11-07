@@ -3,6 +3,7 @@
  *****************************************************************************
  *  Copyright (C) 2019 EPCC
  *  Written by Iakovos Panourgias <i.panourgias@epcc.ed.ac.uk>
+ *  This software was developed as part of the EC H2020 funded project NEXTGenIO (Project ID: 671951) www.nextgenio.eu
  *
  *  This file is part of SLURM, a resource management program.
  *  For details, see <https://slurm.schedmd.com>.

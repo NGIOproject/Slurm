@@ -44,6 +44,7 @@
 print_field_t *field = NULL;
 int curr_inx = 1;
 char outbuf[FORMAT_STRING_SIZE];
+static long workflow_start;				// NEXTGenIO
 
 #define SACCT_TRES_AVE  0x0001
 #define SACCT_TRES_OUT  0x0002
@@ -248,6 +249,29 @@ static uint64_t _get_tres_cnt(int type, void *object, int tres_pos,
 
 	if (tmp_uint64 == INFINITE64)
 		tmp_uint64 = NO_VAL64;
+
+	return tmp_uint64;
+}
+
+static uint64_t _get_workflow_duration(int type, void *object)
+{
+	uint64_t tmp_uint64 = NO_VAL64;
+	slurmdb_job_rec_t *job = (slurmdb_job_rec_t *)object;
+	slurmdb_step_rec_t *step = (slurmdb_step_rec_t *)object;
+
+	if ((type != JOB) && (type != JOBSTEP))
+		return tmp_uint64;
+
+	if ( type == JOB ) {
+		if ( job->workflow_start == 1 ) {
+			workflow_start = job->start;
+			tmp_uint64 = job->elapsed;
+		} else if ( (job->workflow_id != NO_VAL) && (job->workflow_start == 0) ) {
+			tmp_uint64 = job->end - workflow_start;
+		}
+	} else if ( type == JOBSTEP ) {
+		tmp_uint64 = step->end - workflow_start;
+	}
 
 	return tmp_uint64;
 }
@@ -2529,6 +2553,13 @@ extern void print_fields(type_t type, void *object)
 			}
 			field->print_routine(field,
 						 (uint16_t)tmp_int,
+						 (curr_inx == field_count));
+			break;
+		case PRINT_WORKFLOWDURATION:
+			tmp_int = _get_workflow_duration(type, object);
+
+			field->print_routine(field,
+						 (uint64_t) tmp_int,
 						 (curr_inx == field_count));
 			break;
 		default:

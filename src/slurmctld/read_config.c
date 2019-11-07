@@ -1993,6 +1993,9 @@ static int _restore_node_state(int recover,
 		node_ptr->nvram_memory_capacity	    = old_node_ptr->nvram_memory_capacity;		// NEXTGenIO
 		node_ptr->nvram_appdirect_capacity	= old_node_ptr->nvram_appdirect_capacity;	// NEXTGenIO
 		node_ptr->nvram_number_of_namespaces= old_node_ptr->nvram_number_of_namespaces;	// NEXTGenIO
+		node_ptr->free_mem_nvram			= old_node_ptr->free_mem_nvram;				// NEXTGenIO
+		node_ptr->free_space_nvram_0		= old_node_ptr->free_space_nvram_0;			// NEXTGenIO
+		node_ptr->free_space_nvram_1		= old_node_ptr->free_space_nvram_1;			// NEXTGenIO
 		node_ptr->weight        = old_node_ptr->weight;
 
 		node_ptr->sus_job_cnt   = old_node_ptr->sus_job_cnt;

@@ -787,6 +787,7 @@ static job_desc_msg_t *_job_desc_msg_create_from_opts(slurm_opt_t *opt_local)
 	if (opt_local->workflow_post_dependency)
 		j->workflow_post_dependency   = xstrdup(opt_local->workflow_post_dependency);
 	j->workflow_end               = opt_local->workflow_end;
+	j->workflow_same_nodes        = opt_local->workflow_same_nodes;
 	if (opt_local->filesystem_device)
 		j->filesystem_device  = xstrdup(opt_local->filesystem_device);
 	if (opt_local->filesystem_type)

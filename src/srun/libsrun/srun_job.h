@@ -128,6 +128,8 @@ typedef struct srun_job {
 	char *account;    /* account of this job */
 	char *qos;        /* job's qos */
 	char *resv_name;  /* reservation the job is using */
+	uint16_t nvram_mode;	/* NVRAM mode */				// NEXTGenIO
+	uint32_t nvram_size;	/* NVRAM size */				// NEXTGenIO
 } srun_job_t;
 
 void    update_job_state(srun_job_t *job, srun_job_state_t newstate);

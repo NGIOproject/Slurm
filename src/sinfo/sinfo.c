@@ -777,8 +777,11 @@ static bool _match_node_data(sinfo_data_t *sinfo_ptr, node_info_t *node_ptr)
 	if (sinfo_ptr->nodes &&
 	    params.match_flags.nvram_flag &&
 	    ( (node_ptr->nvram_capacity != sinfo_ptr->nvram_capacity) ||
-	    	(node_ptr->nvram_memory_capacity != sinfo_ptr->nvram_memory_capacity) ||
-			(node_ptr->nvram_appdirect_capacity != sinfo_ptr->nvram_appdirect_capacity) ) )
+	      (node_ptr->nvram_memory_capacity != sinfo_ptr->nvram_memory_capacity) ||
+		  (node_ptr->nvram_appdirect_capacity != sinfo_ptr->nvram_appdirect_capacity) ||
+		  (node_ptr->free_mem_nvram != sinfo_ptr->free_mem_nvram) ||
+		  (node_ptr->free_space_nvram_0 != sinfo_ptr->free_space_nvram_0) ||
+		  (node_ptr->free_space_nvram_1 != sinfo_ptr->free_space_nvram_1) ) )
 		return false;
 
 	if (params.match_flags.state_flag) {
@@ -969,6 +972,9 @@ static void _update_sinfo(sinfo_data_t *sinfo_ptr, node_info_t *node_ptr)
 		sinfo_ptr->nvram_memory_capacity = node_ptr->nvram_memory_capacity;			// NEXTGenIO
 		sinfo_ptr->nvram_appdirect_capacity = node_ptr->nvram_appdirect_capacity;	// NEXTGenIO
 		sinfo_ptr->nvram_number_of_namespaces = node_ptr->nvram_number_of_namespaces;// NEXTGenIO
+		sinfo_ptr->free_mem_nvram = node_ptr->free_mem_nvram;						// NEXTGenIO
+		sinfo_ptr->free_space_nvram_0 = node_ptr->free_space_nvram_0;				// NEXTGenIO
+		sinfo_ptr->free_space_nvram_1 = node_ptr->free_space_nvram_1;				// NEXTGenIO
 	} else if (hostlist_find(sinfo_ptr->nodes, node_ptr->name) != -1) {
 		/* we already have this node in this record,
 		 * just return, don't duplicate */

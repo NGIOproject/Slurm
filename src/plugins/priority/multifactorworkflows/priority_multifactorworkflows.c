@@ -4,6 +4,7 @@
  *
  *  Copyright (C) 2018 EPCC, Edinburgh University
  *   Written by Iakovos Panourgias <i.panourgias@epcc.ed.ac.uk>
+ *  This software was developed as part of the EC H2020 funded project NEXTGenIO (Project ID: 671951) www.nextgenio.eu
  *
  *  Based on priority_multifactor.c, whose copyright information is
  *  reproduced below:
@@ -1766,9 +1767,9 @@ extern uint32_t priority_p_set(uint32_t last_prio, struct job_record *job_ptr)
 			itr2 = list_iterator_create(job_list);
 			struct job_record *job_ptr2 = NULL;
 			while ((job_ptr2 = list_next(itr2))) {
-				debug3("%s: job_list job_id:%u, state:%s, state_reason:%d, state_reason:%s, prio:%d, workflow_start:%u, parent:%s, child:%s, end:%u",
+				debug3("%s: job_list job_id:%u, state:%s, state_reason:%d, state_reason:%s, prio:%d, sn:%u, workflow_start:%u, parent:%s, child:%s, end:%u",
 						__func__, job_ptr2->job_id, job_state_string(job_ptr2->job_state), job_ptr2->state_reason, job_reason_string(job_ptr2->state_reason),
-						job_ptr2->priority, job_ptr2->workflow_start, job_ptr2->workflow_prior_dependency, job_ptr2->workflow_post_dependency, job_ptr2->workflow_end);
+						job_ptr2->priority, job_ptr2->workflow_same_nodes, job_ptr2->workflow_start, job_ptr2->workflow_prior_dependency, job_ptr2->workflow_post_dependency, job_ptr2->workflow_end);
 			}
 			list_iterator_destroy(itr2);
 		}

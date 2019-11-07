@@ -97,6 +97,9 @@ typedef struct {
 	uint32_t nvram_memory_capacity;		// NEXTGenIO
 	uint32_t nvram_appdirect_capacity;	// NEXTGenIO
 	uint16_t nvram_number_of_namespaces;// NEXTGenIO
+	uint32_t free_mem_nvram;			// NEXTGenIO
+	uint32_t free_space_nvram_0;		// NEXTGenIO
+	uint32_t free_space_nvram_1;		// NEXTGenIO
 
 	uint32_t max_cpus_per_node;
 	uint64_t alloc_memory;

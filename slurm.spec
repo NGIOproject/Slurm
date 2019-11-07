@@ -8,7 +8,7 @@ Group:		System Environment/Base
 License:	GPLv2+
 URL:		https://slurm.schedmd.com/
 
-Version_NEXTGenIO:    1.2.0
+Version_NEXTGenIO:    1.6.0
 %global rel_NEXTGenIO 1
 Release_NEXTGenIO:    %{rel_NEXTGenIO}%{?dist}
 

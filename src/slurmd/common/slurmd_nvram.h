@@ -2,9 +2,10 @@
  *  slurmd_nvram.h - slurmd NVRAM management
  *****************************************************************************
  *  Copyright (C) 2019 EPCC
- *		EPCC, Iakovos Panourgias <i.panourgias@epcc.ed.ac.uk>, XXXXXX FIXME
+ *		EPCC, Iakovos Panourgias <i.panourgias@epcc.ed.ac.uk>
  *
  *  Written by Iakovos Panourgias <i.panourgias@epcc.ed.ac.uk>
+ *  This software was developed as part of the EC H2020 funded project NEXTGenIO (Project ID: 671951) www.nextgenio.eu
  *
  *  This file is part of SLURM, a resource management program.
  *  For details, see <https://slurm.schedmd.com>.
@@ -57,7 +58,11 @@ extern int get_nvram_partition_number(uint16_t *nvram_partition_no);
 /* Get NVRAM partitions */
 extern int get_namespaces(uint16_t *nvram_number_of_namespaces);
 
-/* Get Free NVRAM in GiB */
-//extern int get_free_nvram(uint32_t *free_nvram);
+/* Get Free NVRAM Memory in GiB */
+extern int get_free_mem_nvram(uint32_t *free_mem_nvram);
+
+/* Get Free NVRAM space in GiB */
+extern int get_free_space_nvram(uint32_t *free_space_nvram_0, uint32_t *free_space_nvram_1);
+
 
 #endif	/* _SLURMD_NVRAM_H */

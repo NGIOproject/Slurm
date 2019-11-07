@@ -177,6 +177,9 @@ typedef struct slurmd_config {
 	uint32_t nvram_memory_capacity; 	/* Memory NVRAM in GBs */ 					// NEXTGenIO
 	uint32_t nvram_appdirect_capacity; 	/* AppDirect NVRAM in GBs */ 				// NEXTGenIO
 	uint16_t nvram_number_of_namespaces;/* Namespaces */							// NEXTGenIO
+	uint32_t free_mem_nvram;			/* Free NVRAM memory in GiB */				// NEXTGenIO
+	uint32_t free_space_nvram_0;		/* Free NVRAM space in GiB */				// NEXTGenIO
+	uint32_t free_space_nvram_1;		/* Free NVRAM space in GiB */				// NEXTGenIO
 } slurmd_conf_t;
 
 extern slurmd_conf_t * conf;

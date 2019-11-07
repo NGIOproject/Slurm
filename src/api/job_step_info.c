@@ -327,7 +327,7 @@ slurm_sprint_job_step_info ( job_step_info_t * job_step_ptr,
 	}
 
 	xstrcat(out, line_end);
-	xstrfmtcat(out, "Optimise for energy=%s", job_step_ptr->optimise_for_energy ? "no" : "yes");
+	xstrfmtcat(out, "Optimise for energy=%s", job_step_ptr->optimise_for_energy ? "yes" : "no");
 
 	/****** END OF JOB RECORD ******/
 	if (one_liner)

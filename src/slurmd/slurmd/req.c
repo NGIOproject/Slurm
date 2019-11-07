@@ -106,6 +106,7 @@
 #include "src/slurmd/common/reverse_tree_math.h"
 #include "src/slurmd/common/slurmstepd_init.h"
 #include "src/slurmd/common/task_plugin.h"
+#include "src/slurmd/common/slurmd_nvram.h"		// NEXTGenIO
 
 #define _LIMIT_INFO 0
 
@@ -3262,6 +3263,8 @@ _rpc_ping(slurm_msg_t *msg)
 		ping_slurmd_resp_msg_t ping_resp;
 		get_cpu_load(&ping_resp.cpu_load);
 		get_free_mem(&ping_resp.free_mem);
+		get_free_mem_nvram(&ping_resp.free_mem_nvram);
+		get_free_space_nvram(&ping_resp.free_space_nvram_0, &ping_resp.free_space_nvram_1);
 		slurm_msg_t_copy(&resp_msg, msg);
 		resp_msg.msg_type = RESPONSE_PING_SLURMD;
 		resp_msg.data     = &ping_resp;

@@ -2,9 +2,10 @@
  *  slurmd_nvram.c - slurmd NVRAM management
  *****************************************************************************
  *  Copyright (C) 2019 EPCC
- *		EPCC, Iakovos Panourgias <i.panourgias@epcc.ed.ac.uk>, XXXXXX FIXME
+ *		EPCC, Iakovos Panourgias <i.panourgias@epcc.ed.ac.uk>
  *
  *  Written by Iakovos Panourgias <i.panourgias@epcc.ed.ac.uk>
+ *  This software was developed as part of the EC H2020 funded project NEXTGenIO (Project ID: 671951) www.nextgenio.eu 
  *
  *  This file is part of SLURM, a resource management program.
  *  For details, see <https://slurm.schedmd.com>.
@@ -719,6 +720,161 @@ extern int get_namespaces(uint16_t *nvram_number_of_namespaces)
 	*nvram_number_of_namespaces = no_namespaces;
 
 	debug2("%s: Found %d namespaces", __func__, no_namespaces);
+
+	return rc;
+}
+
+extern int get_free_mem_nvram(uint32_t *free_mem_nvram)
+{
+	char *resp_msg, *save_ptr = NULL, *argv[10], *tok;
+	int status = 0, free_mem = 0;
+	int rc = SLURM_SUCCESS;
+	char temp[60], unit[10];
+
+	if (ndctl_found == 0) {
+		/* This node on cluster lacks ndctl; should not be NVRAM */
+		static bool log_event = true;
+		if (log_event) {
+			info("%s: ndctl program not found or node isn't NVRAM, can not get NVRAM modes",
+			     __func__);
+			log_event = false;
+		}
+		rc = SLURM_ERROR;
+		return rc;
+	}
+
+	argv[0] = "cat";
+	argv[1] = "/proc/meminfo";
+	argv[2] = NULL;
+
+	resp_msg = _run_script("/usr/bin/cat", argv, &status);
+	if (!WIFEXITED(status) || (WEXITSTATUS(status) != 0)) {
+		error("%s: meminfo status:%u response:%s",
+		      __func__, status, resp_msg);
+	}
+	if (resp_msg == NULL) {
+		info("%s: meminfo returned no information", __func__);
+	} else {
+		tok = NULL;
+		_log_script_argv(argv, resp_msg, true);
+		tok = strtok_r(resp_msg, "\n", &save_ptr);
+
+		while (tok) {
+			debug2("%s: tok:%s.", __func__, tok);
+			if ( !xstrncasecmp(tok, "MemFree", 6)) {
+				/*                   1234567   */
+				debug2("%s:          tok:%s.", __func__, tok);
+				sscanf(tok, "%s %d %s", temp, &free_mem, unit);
+			}
+			tok = strtok_r(NULL, "\n", &save_ptr);
+		}
+		xfree(resp_msg);
+	}
+
+	*free_mem_nvram = free_mem / 1024 / 1024;
+
+	debug3("%s: Found free RAM:%d GBs ", __func__, *free_mem_nvram);
+
+	return rc;
+}
+
+extern int get_free_space_nvram(uint32_t *free_space_nvram_0, uint32_t *free_space_nvram_1)
+{
+	char *resp_msg, *save_ptr = NULL, *argv[10], *tok, *tmp = NULL;
+	int status = 0, free_space_0 = 0, free_space_1 = 0;
+	int rc = SLURM_SUCCESS;
+	char dev_path[60], total_size[20], used_size[10], free_space[10], percentage[10], mount_path[50];
+
+	if (ndctl_found == 0) {
+		/* This node on cluster lacks ndctl; should not be NVRAM */
+		static bool log_event = true;
+		if (log_event) {
+			info("%s: ndctl program not found or node isn't NVRAM, can not get NVRAM modes",
+			     __func__);
+			log_event = false;
+		}
+		rc = SLURM_ERROR;
+		return rc;
+	}
+
+	argv[0] = "df";
+	argv[1] = "-h";
+	argv[2] = NULL;
+
+	resp_msg = _run_script("/usr/bin/df", argv, &status);
+	if (!WIFEXITED(status) || (WEXITSTATUS(status) != 0)) {
+		error("%s: disk free status:%u response:%s",
+		      __func__, status, resp_msg);
+	}
+	if (resp_msg == NULL) {
+		info("%s: disk free returned no information", __func__);
+	} else {
+		tok = NULL;
+		_log_script_argv(argv, resp_msg, true);
+		tok = strtok_r(resp_msg, "\n", &save_ptr);
+
+		while (tok) {
+			debug2("%s: tok:%s.", __func__, tok);
+			if ( !xstrncasecmp(tok, "/dev/pmem12", 11)) {
+			//if ( !xstrncasecmp(tok, "/dev/sda3", 9)) {
+				/*                   12345678901   */
+				debug2("%s:          tok:%s.", __func__, tok);
+				sscanf(tok, "%s %s %s %s %s %s",
+						dev_path, total_size, used_size, free_space, percentage, mount_path);
+				tmp = xstrdup(free_space);
+				if ( xstrstr(tmp, "G") ) {
+					xstrsubstituteall(tmp, "G", "");
+					*free_space_nvram_0 = atoi(tmp);
+				} else if ( xstrstr(tmp, "M") ) {
+					xstrsubstituteall(tmp, "M", "");
+					free_space_0 = atoi(tmp);
+					*free_space_nvram_0 = free_space_0 / 1024;
+				} else if ( xstrstr(tmp, "K") ) {
+					xstrsubstituteall(tmp, "K", "");
+					free_space_0 = atoi(tmp);
+					*free_space_nvram_0 = free_space_0 / 1024 / 1024;
+				} else if ( xstrstr(tmp, "T") ) {
+					xstrsubstituteall(tmp, "T", "");
+					free_space_0 = atoi(tmp);
+					*free_space_nvram_0 = free_space_0 * 1024;
+				} else {
+					error("%s: Unknown unit:%s", __func__, tmp);
+				}
+				xfree(tmp);
+			} else if ( !xstrncasecmp(tok, "/dev/pmem13", 11)) {
+			//} else if ( !xstrncasecmp(tok, "/dev/sda1", 9)) {
+				/*                          12345678901   */
+				debug2("%s:          tok:%s.", __func__, tok);
+				sscanf(tok, "%s %s %s %s %s %s",
+						dev_path, total_size, used_size, free_space, percentage, mount_path);
+				tmp = xstrdup(free_space);
+				if ( xstrstr(tmp, "G") ) {
+					xstrsubstituteall(tmp, "G", "");
+					*free_space_nvram_1 = atoi(tmp);
+				} else if ( xstrstr(tmp, "M") ) {
+					xstrsubstituteall(tmp, "M", "");
+					free_space_1 = atoi(tmp);
+					*free_space_nvram_1 = free_space_1 / 1024;
+				} else if ( xstrstr(tmp, "K") ) {
+					xstrsubstituteall(tmp, "K", "");
+					free_space_1 = atoi(tmp);
+					*free_space_nvram_1 = free_space_1 / 1024 / 1024;
+				} else if ( xstrstr(tmp, "T") ) {
+					xstrsubstituteall(tmp, "T", "");
+					free_space_1 = atoi(tmp);
+					*free_space_nvram_1 = free_space_1 * 1024;
+				} else {
+					error("%s: Unknown unit:%s", __func__, free_space);
+				}
+				xfree(tmp);
+			}
+			tok = strtok_r(NULL, "\n", &save_ptr);
+		}
+		xfree(resp_msg);
+	}
+
+	debug3("%s: Found free space 0:%d, 1:%d GBs ",
+			__func__, *free_space_nvram_0, *free_space_nvram_1);
 
 	return rc;
 }
