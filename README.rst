@@ -3,11 +3,11 @@ Instructions - Workflow
 
 1) Clone the repository:
 
-git clone git@git.ph.ed.ac.uk:nextgenio/SLURM.git
+git clone git@github.com:NGIOproject/Slurm.git
 
-2) Checkout the 17.02 NEXTGenIO branch:
+2) Checkout the 18.08 NEXTGenIO branch:
 
-git checkout slurm-17.02_NEXTGenIO
+git checkout slurm-NEXTGenIO
 
 3) Create a new feature branch (appending _NEXTGenIO at the end):
 
@@ -19,7 +19,7 @@ git checkout -b my_new_branch_for_developing_feature_a_NEXTGenIO
 
 (make sure that your my_new_branch_for_developing_feature_a is clean, i.e. no outstanding commits)
 
-git checkout slurm-17.02_NEXTGenIO
+git checkout slurm-NEXTGenIO
 
 git merge my_new_branch_for_developing_feature_a_NEXTGenIO
 
@@ -29,8 +29,7 @@ git commit -a -m "my_user_name: Completed Feature A."
 
 git push
 
-This repository is based on the released v.17.02.02 of SLURM.
-Using the slurm-17.02_NEXTGenIO as our master branch will allow us to cleanly merge with SLURM later on.
+This repository is based on the released v.18.08.8 of SLURM.
 
 
 Slurm Workload Manager
